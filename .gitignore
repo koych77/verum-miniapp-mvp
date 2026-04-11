@@ -1,0 +1,13 @@
+# Ignore everything from the legacy local workspace by default
+/*
+
+# Keep git internals
+!.gitignore
+!README.md
+!.github/
+!miniapp/
+
+# Keep GitHub workflow and Mini App source
+!.github/workflows/
+!.github/workflows/miniapp-ci.yml
+!miniapp/**
