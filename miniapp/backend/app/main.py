@@ -4,6 +4,8 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.bot.main import start_bot_polling_task, stop_bot_polling_task
@@ -35,12 +37,17 @@ app.include_router(router)
 
 frontend_dist = Path(settings.frontend_dist_dir)
 frontend_index = frontend_dist / "index.html"
+frontend_assets = frontend_dist / "assets"
+
+if frontend_assets.exists():
+    app.mount("/miniapp/assets", StaticFiles(directory=frontend_assets), name="miniapp-assets")
+    app.mount("/assets", StaticFiles(directory=frontend_assets), name="assets")
 
 
 @app.get("/", include_in_schema=False)
 def root():
     if frontend_index.exists():
-        return FileResponse(frontend_index)
+        return RedirectResponse(url="/miniapp")
     return {"app": settings.app_name, "docs": "/docs", "health": "/api/v1/health"}
 
 
@@ -51,18 +58,10 @@ def miniapp_entry():
     raise HTTPException(status_code=404, detail="Frontend bundle not found")
 
 
-@app.get("/{full_path:path}", include_in_schema=False)
+@app.get("/miniapp/{full_path:path}", include_in_schema=False)
 def spa_fallback(full_path: str):
-    if full_path.startswith("api/"):
-        raise HTTPException(status_code=404, detail="Not found")
-    normalized = full_path
-    if normalized == "miniapp":
-        normalized = ""
-    elif normalized.startswith("miniapp/"):
-        normalized = normalized[len("miniapp/") :]
-
-    requested = frontend_dist / normalized if normalized else frontend_index
-    if requested.exists() and requested.is_file():
+    requested = frontend_dist / full_path
+    if requested.exists() and requested.is_file() and requested != frontend_index:
         return FileResponse(requested)
     if frontend_index.exists():
         return FileResponse(frontend_index)
