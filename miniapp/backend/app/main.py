@@ -44,11 +44,24 @@ def root():
     return {"app": settings.app_name, "docs": "/docs", "health": "/api/v1/health"}
 
 
+@app.get("/miniapp", include_in_schema=False)
+def miniapp_entry():
+    if frontend_index.exists():
+        return FileResponse(frontend_index)
+    raise HTTPException(status_code=404, detail="Frontend bundle not found")
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 def spa_fallback(full_path: str):
     if full_path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not found")
-    requested = frontend_dist / full_path
+    normalized = full_path
+    if normalized == "miniapp":
+        normalized = ""
+    elif normalized.startswith("miniapp/"):
+        normalized = normalized[len("miniapp/") :]
+
+    requested = frontend_dist / normalized if normalized else frontend_index
     if requested.exists() and requested.is_file():
         return FileResponse(requested)
     if frontend_index.exists():
