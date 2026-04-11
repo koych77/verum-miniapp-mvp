@@ -55,26 +55,34 @@ python -m app.bot.main
 
 ## Railway deployment
 
-Create **two services** in Railway from the same GitHub repo:
+Create **two separate services** in Railway from the same GitHub repo. Do not deploy the repository root as a single service.
 
-1. `verum-miniapp-api`
-   - Root directory: `miniapp/backend`
-   - Start command: from `Procfile`
-   - Variables:
-     - `DATABASE_URL`
-     - `JWT_SECRET`
-     - `TELEGRAM_BOT_TOKEN`
-     - `TELEGRAM_WEBAPP_URL`
-     - `ADMIN_EMAIL`
+### 1. Backend service
 
-2. `verum-miniapp-web`
-   - Root directory: `miniapp/frontend`
-   - Start command: from `Procfile`
-   - Variable:
-     - `VITE_API_BASE_URL=https://<your-api-domain>/api/v1`
+- Service name: `verum-miniapp-api`
+- Root directory: `miniapp/backend`
+- Config file: `miniapp/backend/railway.json`
+- Start command: picked up automatically from `railway.json`
+- Required variables:
+  - `DATABASE_URL`
+  - `JWT_SECRET`
+  - `TELEGRAM_BOT_TOKEN`
+  - `TELEGRAM_WEBAPP_URL`
+  - `ADMIN_EMAIL`
+
+### 2. Frontend service
+
+- Service name: `verum-miniapp-web`
+- Root directory: `miniapp/frontend`
+- Config file: `miniapp/frontend/railway.json`
+- Start command: picked up automatically from `railway.json`
+- Required variable:
+  - `VITE_API_BASE_URL=https://<your-api-domain>/api/v1`
 
 Optional:
-- add PostgreSQL service in Railway and connect `DATABASE_URL`
+- add PostgreSQL service in Railway and connect its `DATABASE_URL` to the backend
+- expose the backend and frontend domains after the first successful deploy
+- point BotFather Mini App URL to the deployed frontend domain
 
 ## GitHub flow
 
