@@ -66,6 +66,7 @@ class ParticipantPublicOut(BaseModel):
 
 
 class ParticipantPrivateOut(ParticipantPublicOut):
+    birth_date: date
     email: EmailStr
     phone: str
 

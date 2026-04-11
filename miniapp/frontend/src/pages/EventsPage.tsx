@@ -1,9 +1,29 @@
-import { EventItem } from "../lib/api";
+import { useState } from "react";
+
+import { api, EventItem } from "../lib/api";
 import { SectionCard } from "../components/SectionCard";
 
 export function EventsPage({ events }: { events: EventItem[] }) {
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
+  const [message, setMessage] = useState<string>("");
+
+  async function handleRegister(eventId: string, disciplineTitle: string) {
+    const key = `${eventId}:${disciplineTitle}`;
+    setPendingKey(key);
+    setMessage("");
+    try {
+      const response = await api.registerForEvent(eventId, disciplineTitle);
+      setMessage(response.status === "already_registered" ? "You are already registered for this discipline." : "Registration added successfully.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to register.");
+    } finally {
+      setPendingKey(null);
+    }
+  }
+
   return (
     <SectionCard title="Events" subtitle="Vertical list with exact date and registration status">
+      {message ? <div className="status-banner">{message}</div> : null}
       <div className="event-column">
         {events.map((event) => (
           <article key={event.id} className="event-card">
@@ -18,9 +38,15 @@ export function EventsPage({ events }: { events: EventItem[] }) {
               <p className="event-address">{event.venue_address}</p>
               <div className="chip-row">
                 {event.disciplines.map((discipline) => (
-                  <span key={`${event.id}-${discipline.title}`} className="chip">
-                    {discipline.title}
-                  </span>
+                  <button
+                    key={`${event.id}-${discipline.title}`}
+                    type="button"
+                    className="chip chip-button"
+                    onClick={() => void handleRegister(event.id, discipline.title)}
+                    disabled={pendingKey === `${event.id}:${discipline.title}`}
+                  >
+                    {pendingKey === `${event.id}:${discipline.title}` ? "Registering..." : `Register: ${discipline.title}`}
+                  </button>
                 ))}
               </div>
             </div>

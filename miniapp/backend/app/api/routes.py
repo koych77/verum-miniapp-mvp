@@ -1,5 +1,11 @@
+import hashlib
+import hmac
 import json
 import secrets
+import smtplib
+from datetime import date
+from email.message import EmailMessage
+from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session, joinedload
@@ -43,18 +49,104 @@ def _participant_public(participant: Participant) -> ParticipantPublicOut:
     )
 
 
+def _next_verum_id(db: Session) -> str:
+    count = db.query(Participant).count() + 1
+    return f"V-{date.today().year}-{count:06d}"
+
+
+def _telegram_auth_payload(init_data: str | None) -> dict:
+    if not init_data or init_data == "demo":
+        return {}
+
+    pairs = dict(parse_qsl(init_data, keep_blank_values=True))
+    provided_hash = pairs.pop("hash", None)
+    if not provided_hash:
+        raise HTTPException(status_code=401, detail="Missing Telegram signature")
+
+    data_check_string = "\n".join(f"{key}={pairs[key]}" for key in sorted(pairs))
+    secret_key = hmac.new(b"WebAppData", settings.telegram_bot_token.encode("utf-8"), hashlib.sha256).digest()
+    expected_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected_hash, provided_hash):
+        raise HTTPException(status_code=401, detail="Invalid Telegram signature")
+
+    user_payload = pairs.get("user")
+    if not user_payload:
+        raise HTTPException(status_code=401, detail="Telegram user payload missing")
+    return json.loads(user_payload)
+
+
+def _provision_telegram_user(payload: dict, db: Session) -> User:
+    telegram_user_id = str(payload["id"])
+    telegram_username = payload.get("username") or f"user_{telegram_user_id}"
+
+    user = db.query(User).filter(User.telegram_user_id == telegram_user_id).first()
+    if user:
+        user.telegram_username = telegram_username
+        return user
+
+    email = f"telegram-{telegram_user_id}@verum.local"
+    user = User(
+        role="participant",
+        telegram_user_id=telegram_user_id,
+        telegram_username=telegram_username,
+        email=email,
+        email_verified=False,
+    )
+    db.add(user)
+    db.flush()
+
+    first_name = payload.get("first_name") or "New"
+    last_name = payload.get("last_name") or "Participant"
+    nickname = payload.get("username") or f"{first_name} {last_name}".strip()
+    participant = Participant(
+        verum_global_id=_next_verum_id(db),
+        user_id=user.id,
+        first_name=first_name,
+        last_name=last_name,
+        nickname=nickname,
+        birth_date=date(2012, 1, 1),
+        gender="not_set",
+        city="Not set",
+        team="Not set",
+        coach_name="Not set",
+        school_name="Not set",
+        phone="Not set",
+        photo_url="https://dummyimage.com/600x800/111111/ff7a00&text=VERUM+ATHLETE",
+    )
+    db.add(participant)
+    return user
+
+
+def _send_code_email(email: str, code: str) -> str:
+    if not settings.smtp_host:
+        return "demo-log"
+
+    message = EmailMessage()
+    message["Subject"] = "VERUM email verification"
+    message["From"] = settings.smtp_from
+    message["To"] = email
+    message.set_content(f"Your VERUM verification code is: {code}")
+
+    with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
+        if settings.smtp_use_tls:
+            smtp.starttls()
+        if settings.smtp_user:
+            smtp.login(settings.smtp_user, settings.smtp_password)
+        smtp.send_message(message)
+
+    return "smtp"
+
+
 def _current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
-    if authorization and authorization.startswith("Bearer "):
-        token = authorization.replace("Bearer ", "", 1).strip()
-        user_id = TOKENS.get(token)
-        if not user_id:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        user = db.get(User, user_id)
-        if user:
-            return user
-    user = db.query(User).filter(User.role == "participant").first()
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing auth token")
+    token = authorization.replace("Bearer ", "", 1).strip()
+    user_id = TOKENS.get(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    user = db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=401, detail="No auth context")
+        raise HTTPException(status_code=401, detail="User not found")
     return user
 
 
@@ -65,12 +157,29 @@ def health():
 
 @router.post("/auth/telegram/init", response_model=AuthOut)
 def telegram_init(payload: TelegramInitIn, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.role == "participant").first()
-    if not user:
-        raise HTTPException(status_code=404, detail="Demo user missing")
+    telegram_payload = _telegram_auth_payload(payload.initData)
+    if telegram_payload:
+        user = _provision_telegram_user(telegram_payload, db)
+    else:
+        user = db.query(User).filter(User.role == "participant").first()
+        if not user:
+            raise HTTPException(status_code=404, detail="Demo user missing")
+
     token = secrets.token_urlsafe(24)
     TOKENS[token] = user.id
-    db.add(AuditLog(actor_user_id=user.id, entity_type="auth", action="telegram_init", payload=json.dumps({"hasInitData": bool(payload.initData)})))
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="auth",
+            action="telegram_init",
+            payload=json.dumps(
+                {
+                    "hasInitData": bool(payload.initData and payload.initData != "demo"),
+                    "telegramUsername": user.telegram_username,
+                }
+            ),
+        )
+    )
     db.commit()
     return AuthOut(token=token, role=user.role, profile_status="active")
 
@@ -81,7 +190,11 @@ def send_email_code(payload: EmailSendIn, db: Session = Depends(get_db), user: U
     EMAIL_CODES[payload.email] = code
     db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="send_code", payload=json.dumps({"email": payload.email, "code": code})))
     db.commit()
-    return {"ok": True, "delivery": "demo-log", "code": code}
+    delivery = _send_code_email(payload.email, code)
+    response = {"ok": True, "delivery": delivery}
+    if settings.environment != "production":
+        response["code"] = code
+    return response
 
 
 @router.post("/auth/email/verify-code")
@@ -213,7 +326,7 @@ def participant_me(db: Session = Depends(get_db), user: User = Depends(_current_
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
     public = _participant_public(participant)
-    return ParticipantPrivateOut(**public.model_dump(), email=user.email, phone=participant.phone)
+    return ParticipantPrivateOut(**public.model_dump(), birth_date=participant.birth_date, email=user.email, phone=participant.phone)
 
 
 @router.patch("/participants/me")

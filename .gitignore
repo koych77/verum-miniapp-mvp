@@ -4,6 +4,9 @@
 # Keep git internals
 !.gitignore
 !README.md
+!.dockerignore
+!Dockerfile
+!railway.json
 !.github/
 !miniapp/
 

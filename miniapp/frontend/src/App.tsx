@@ -18,24 +18,30 @@ export default function App() {
   const [top10, setTop10] = useState<RatingItem[]>([]);
   const [ratings, setRatings] = useState<RatingItem[]>([]);
   const [profile, setProfile] = useState<ParticipantProfile | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function boot() {
-      await initAuth();
-      const [partnerRows, newsRows, eventRows, topRows, ratingRows, profileRow] = await Promise.all([
-        api.getPartners(),
-        api.getNews(),
-        api.getEvents(),
-        api.getTop10(),
-        api.getRatings(),
-        api.getProfile()
-      ]);
-      setPartners(partnerRows);
-      setNews(newsRows);
-      setEvents(eventRows);
-      setTop10(topRows);
-      setRatings(ratingRows);
-      setProfile(profileRow);
+      try {
+        await initAuth();
+        const [partnerRows, newsRows, eventRows, topRows, ratingRows, profileRow] = await Promise.all([
+          api.getPartners(),
+          api.getNews(),
+          api.getEvents(),
+          api.getTop10(),
+          api.getRatings(),
+          api.getProfile()
+        ]);
+        setPartners(partnerRows);
+        setNews(newsRows);
+        setEvents(eventRows);
+        setTop10(topRows);
+        setRatings(ratingRows);
+        setProfile(profileRow);
+      } catch (appError) {
+        const message = appError instanceof Error ? appError.message : "Unexpected Mini App error";
+        setError(message);
+      }
     }
 
     void boot();
@@ -46,12 +52,12 @@ export default function App() {
   let content = <HomePage partners={partners} news={news} events={events} top10={top10} />;
   if (activeTab === "rating") content = <RatingPage ratings={ratings} />;
   if (activeTab === "events") content = <EventsPage events={events} />;
-  if (activeTab === "profile") content = <ProfilePage profile={profile} />;
+  if (activeTab === "profile") content = <ProfilePage profile={profile} onProfileUpdated={setProfile} />;
   if (activeTab === "more") content = <MorePage />;
 
   return (
     <Layout activeTab={activeTab} onTabChange={setActiveTab} ticker={ticker.length ? ticker : ["VERUM", "PARTNERS", "MINI APP"]}>
-      {content}
+      {error ? <div className="error-banner">{error}</div> : content}
     </Layout>
   );
 }

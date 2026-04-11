@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
@@ -23,7 +24,32 @@ async def run_bot() -> None:
     bot = Bot(token=settings.telegram_bot_token)
     dp = Dispatcher()
     dp.message.register(start_handler, CommandStart())
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        await bot.session.close()
+
+
+async def start_bot_polling_task() -> tuple[Bot, asyncio.Task[None]] | None:
+    if not settings.enable_bot_polling or not settings.telegram_bot_token:
+        return None
+
+    bot = Bot(token=settings.telegram_bot_token)
+    dp = Dispatcher()
+    dp.message.register(start_handler, CommandStart())
+    task = asyncio.create_task(dp.start_polling(bot))
+    return bot, task
+
+
+async def stop_bot_polling_task(runtime: tuple[Bot, asyncio.Task[None]] | None) -> None:
+    if not runtime:
+        return
+
+    bot, task = runtime
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
+    await bot.session.close()
 
 
 if __name__ == "__main__":

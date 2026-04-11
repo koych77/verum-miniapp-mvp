@@ -55,7 +55,40 @@ python -m app.bot.main
 
 ## Railway deployment
 
-Create **two separate services** in Railway from the same GitHub repo. Do not deploy the repository root as a single service.
+### Fastest MVP path
+
+Deploy the **repository root** as one Railway service.
+
+What it does:
+
+- builds `miniapp/frontend`
+- serves the built frontend from FastAPI
+- exposes API routes at `/api/v1`
+- can run Telegram bot polling inside the same container
+
+Required variables:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_WEBAPP_URL`
+- `ADMIN_EMAIL`
+
+Recommended:
+
+- `ENVIRONMENT=production`
+- `ENABLE_BOT_POLLING=true`
+
+Optional for real email verification:
+
+- `SMTP_HOST`
+- `SMTP_PORT`
+- `SMTP_USER`
+- `SMTP_PASSWORD`
+- `SMTP_FROM`
+- `SMTP_USE_TLS`
+
+Advanced option: create **two separate services** in Railway from the same GitHub repo if you want to split frontend and backend.
 
 ### 1. Backend service
 
@@ -97,11 +130,9 @@ Recommended flow:
 
 ## Important note
 
-This is a working MVP scaffold, not yet the full production system. The next steps are:
+This is a working MVP scaffold. The next bigger steps are:
 
-1. real Telegram initData verification
-2. real email delivery provider
-3. PostgreSQL migrations with Alembic
-4. admin moderation flows
-5. organizer and coach protected flows
-6. xlsx/docx import pipeline from VERUM
+1. PostgreSQL migrations with Alembic
+2. admin moderation flows
+3. organizer and coach protected flows
+4. xlsx/docx import pipeline from VERUM

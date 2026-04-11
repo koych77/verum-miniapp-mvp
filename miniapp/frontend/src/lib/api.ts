@@ -1,4 +1,6 @@
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? "http://localhost:8000/api/v1";
+const API_BASE =
+  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+  `${window.location.origin.replace(/\/$/, "")}/api/v1`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem("verum-demo-token");
@@ -72,6 +74,7 @@ export type ParticipantProfile = {
   first_name: string;
   last_name: string;
   nickname: string;
+  birth_date: string;
   age: number;
   gender: string;
   city: string;
@@ -83,14 +86,44 @@ export type ParticipantProfile = {
   phone: string;
 };
 
+export type ParticipantUpdate = {
+  first_name: string;
+  last_name: string;
+  nickname: string;
+  birth_date: string;
+  gender: string;
+  city: string;
+  team: string;
+  coach_name: string;
+  school_name: string;
+  phone: string;
+  email: string;
+  photo_url: string;
+};
+
+declare global {
+  interface Window {
+    Telegram?: {
+      WebApp?: {
+        ready: () => void;
+        expand: () => void;
+        initData?: string;
+      };
+    };
+  }
+}
+
 export async function initAuth() {
   const existing = localStorage.getItem("verum-demo-token");
   if (existing) {
     return existing;
   }
+  const initData = window.Telegram?.WebApp?.initData || "demo";
+  window.Telegram?.WebApp?.ready?.();
+  window.Telegram?.WebApp?.expand?.();
   const data = await request<{ token: string }>("/auth/telegram/init", {
     method: "POST",
-    body: JSON.stringify({ initData: "demo" })
+    body: JSON.stringify({ initData })
   });
   localStorage.setItem("verum-demo-token", data.token);
   return data.token;
@@ -103,5 +136,15 @@ export const api = {
   getTop10: () => request<RatingItem[]>("/ratings/global/top10"),
   getRatings: () => request<RatingItem[]>("/ratings/global"),
   getEvents: () => request<EventItem[]>("/events"),
-  getProfile: () => request<ParticipantProfile>("/participants/me")
+  getProfile: () => request<ParticipantProfile>("/participants/me"),
+  updateProfile: (payload: ParticipantUpdate) =>
+    request<{ ok: boolean; auditLogged: boolean; adminNotified: boolean }>("/participants/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  registerForEvent: (eventId: string, disciplineTitle: string) =>
+    request<{ ok: boolean; status: string }>(`/events/${eventId}/register-self`, {
+      method: "POST",
+      body: JSON.stringify({ discipline_title: disciplineTitle })
+    })
 };
