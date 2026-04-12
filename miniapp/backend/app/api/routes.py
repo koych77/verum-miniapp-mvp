@@ -10,16 +10,22 @@ from urllib.parse import parse_qsl
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
 from app.db.session import get_db
-from app.models.entities import AuditLog, Event, EventRegistration, News, Partner, Participant, RatingSnapshot, User
+from app.models.entities import AuditLog, Event, EventRegistration, EventResult, News, Partner, Participant, RatingSnapshot, User
 from app.schemas.common import (
     AuthOut,
+    AuthStatusOut,
+    DisciplineOut,
     EmailSendIn,
     EmailVerifyIn,
     EventOut,
+    EventResultOut,
     NewsOut,
+    ParticipantHistoryItemOut,
     ParticipantPrivateOut,
     ParticipantPublicOut,
+    ParticipantSummaryOut,
     ParticipantUpdateIn,
     PartnerOut,
     RatingItemOut,
@@ -49,6 +55,69 @@ def _participant_public(participant: Participant) -> ParticipantPublicOut:
     )
 
 
+def _participant_summary(participant: Participant) -> ParticipantSummaryOut:
+    return ParticipantSummaryOut(
+        verum_global_id=participant.verum_global_id,
+        full_name=f"{participant.first_name} {participant.last_name}",
+        nickname=participant.nickname,
+        gender=participant.gender,
+        city=participant.city,
+        team=participant.team,
+        school_name=participant.school_name,
+        photo_url=participant.photo_url,
+    )
+
+
+def _rating_item(snapshot: RatingSnapshot, participant: Participant) -> RatingItemOut:
+    return RatingItemOut(
+        rank=snapshot.rank_global or 0,
+        verum_global_id=participant.verum_global_id,
+        full_name=f"{participant.first_name} {participant.last_name}",
+        nickname=participant.nickname,
+        city=participant.city,
+        team=participant.team,
+        gender=participant.gender,
+        points=snapshot.total_points,
+    )
+
+
+def _history_item(result: EventResult, event: Event | None) -> ParticipantHistoryItemOut:
+    return ParticipantHistoryItemOut(
+        event_title=event.title if event else "",
+        event_slug=event.slug if event else "",
+        date=event.start_at if event else None,
+        discipline_title=result.discipline_title,
+        qualifying_place=result.qualifying_place,
+        top_stage=result.top_stage,
+        final_place=result.final_place,
+        awarded_points=result.awarded_points,
+    )
+
+
+def _event_out(event: Event) -> EventOut:
+    participants_count = len({registration.participant_id for registration in event.registrations})
+    return EventOut(
+        id=event.id,
+        slug=event.slug,
+        title=event.title,
+        city=event.city,
+        venue_address=event.venue_address,
+        start_at=event.start_at,
+        registration_deadline=event.registration_deadline,
+        poster_url=event.poster_url,
+        description=event.description,
+        status=event.status,
+        organizer_name=event.organizer_name,
+        registration_open=event_registration_open(event),
+        participants_count=participants_count,
+        results_count=len(event.results),
+        disciplines=[
+            DisciplineOut(title=discipline.title, format=discipline.format, nomination_label=discipline.nomination_label)
+            for discipline in sorted(event.disciplines, key=lambda row: row.sort_order)
+        ],
+    )
+
+
 def _next_verum_id(db: Session) -> str:
     count = db.query(Participant).count() + 1
     return f"V-{date.today().year}-{count:06d}"
@@ -57,6 +126,8 @@ def _next_verum_id(db: Session) -> str:
 def _telegram_auth_payload(init_data: str | None) -> dict:
     if not init_data or init_data == "demo":
         return {}
+    if not settings.telegram_bot_token:
+        raise HTTPException(status_code=500, detail="Telegram bot token is not configured")
 
     pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     provided_hash = pairs.pop("hash", None)
@@ -78,13 +149,12 @@ def _telegram_auth_payload(init_data: str | None) -> dict:
 def _provision_telegram_user(payload: dict, db: Session) -> User:
     telegram_user_id = str(payload["id"])
     telegram_username = payload.get("username") or f"user_{telegram_user_id}"
-
     user = db.query(User).filter(User.telegram_user_id == telegram_user_id).first()
     if user:
         user.telegram_username = telegram_username
         return user
 
-    email = f"telegram-{telegram_user_id}@verum.local"
+    email = f"telegram-{telegram_user_id}@verum.app"
     user = User(
         role="participant",
         telegram_user_id=telegram_user_id,
@@ -95,8 +165,8 @@ def _provision_telegram_user(payload: dict, db: Session) -> User:
     db.add(user)
     db.flush()
 
-    first_name = payload.get("first_name") or "New"
-    last_name = payload.get("last_name") or "Participant"
+    first_name = payload.get("first_name") or "Новый"
+    last_name = payload.get("last_name") or "участник"
     nickname = payload.get("username") or f"{first_name} {last_name}".strip()
     participant = Participant(
         verum_global_id=_next_verum_id(db),
@@ -106,11 +176,11 @@ def _provision_telegram_user(payload: dict, db: Session) -> User:
         nickname=nickname,
         birth_date=date(2012, 1, 1),
         gender="not_set",
-        city="Not set",
-        team="Not set",
-        coach_name="Not set",
-        school_name="Not set",
-        phone="Not set",
+        city="Не указан",
+        team="Не указана",
+        coach_name="Не указан",
+        school_name="Не указана",
+        phone="Не указан",
         photo_url="https://dummyimage.com/600x800/111111/ff7a00&text=VERUM+ATHLETE",
     )
     db.add(participant)
@@ -125,7 +195,7 @@ def _send_code_email(email: str, code: str) -> str:
     message["Subject"] = "VERUM email verification"
     message["From"] = settings.smtp_from
     message["To"] = email
-    message.set_content(f"Your VERUM verification code is: {code}")
+    message.set_content(f"Ваш код подтверждения VERUM: {code}")
 
     with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=20) as smtp:
         if settings.smtp_use_tls:
@@ -188,9 +258,9 @@ def telegram_init(payload: TelegramInitIn, db: Session = Depends(get_db)):
 def send_email_code(payload: EmailSendIn, db: Session = Depends(get_db), user: User = Depends(_current_user)):
     code = "".join(secrets.choice("0123456789") for _ in range(6))
     EMAIL_CODES[payload.email] = code
-    db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="send_code", payload=json.dumps({"email": payload.email, "code": code})))
-    db.commit()
     delivery = _send_code_email(payload.email, code)
+    db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="send_code", payload=json.dumps({"email": payload.email})))
+    db.commit()
     response = {"ok": True, "delivery": delivery}
     if settings.environment != "production":
         response["code"] = code
@@ -208,9 +278,14 @@ def verify_email_code(payload: EmailVerifyIn, db: Session = Depends(get_db), use
     return {"ok": True}
 
 
-@router.get("/auth/me")
+@router.get("/auth/me", response_model=AuthStatusOut)
 def auth_me(user: User = Depends(_current_user)):
-    return {"role": user.role, "email": user.email, "telegramUsername": user.telegram_username}
+    return AuthStatusOut(
+        role=user.role,
+        email=user.email,
+        telegram_username=user.telegram_username,
+        email_verified=user.email_verified,
+    )
 
 
 @router.get("/partners/ticker", response_model=list[PartnerOut])
@@ -225,6 +300,14 @@ def partners(db: Session = Depends(get_db)):
     return [PartnerOut.model_validate(row, from_attributes=True) for row in rows]
 
 
+@router.get("/partners/{slug}", response_model=PartnerOut)
+def partner_detail(slug: str, db: Session = Depends(get_db)):
+    partner = db.query(Partner).filter(Partner.slug == slug).first()
+    if not partner:
+        raise HTTPException(status_code=404, detail="Partner not found")
+    return PartnerOut.model_validate(partner, from_attributes=True)
+
+
 @router.get("/news", response_model=list[NewsOut])
 def news(db: Session = Depends(get_db)):
     rows = db.query(News).order_by(News.published_at.desc()).limit(5).all()
@@ -233,16 +316,55 @@ def news(db: Session = Depends(get_db)):
 
 @router.get("/events", response_model=list[EventOut])
 def events(db: Session = Depends(get_db)):
-    rows = db.query(Event).options(joinedload(Event.disciplines)).order_by(Event.start_at.asc()).all()
-    return [EventOut.model_validate(row, from_attributes=True) for row in rows]
+    rows = (
+        db.query(Event)
+        .options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results))
+        .order_by(Event.start_at.asc())
+        .all()
+    )
+    return [_event_out(row) for row in rows]
 
 
 @router.get("/events/{slug}", response_model=EventOut)
 def event_by_slug(slug: str, db: Session = Depends(get_db)):
-    row = db.query(Event).options(joinedload(Event.disciplines)).filter(Event.slug == slug).first()
+    row = (
+        db.query(Event)
+        .options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results))
+        .filter(Event.slug == slug)
+        .first()
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Event not found")
-    return EventOut.model_validate(row, from_attributes=True)
+    return _event_out(row)
+
+
+@router.get("/events/{slug}/results", response_model=list[EventResultOut])
+def event_results(slug: str, db: Session = Depends(get_db)):
+    event = db.query(Event).filter(Event.slug == slug).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    rows = (
+        db.query(EventResult, Participant)
+        .join(Participant, Participant.id == EventResult.participant_id)
+        .filter(EventResult.event_id == event.id)
+        .all()
+    )
+    rows.sort(key=lambda row: ((row[0].final_place or 999), -row[0].awarded_points))
+    return [
+        EventResultOut(
+            participant_id=participant.id,
+            verum_global_id=participant.verum_global_id,
+            full_name=f"{participant.first_name} {participant.last_name}",
+            nickname=participant.nickname,
+            discipline_title=result.discipline_title,
+            qualifying_place=result.qualifying_place,
+            top_stage=result.top_stage,
+            final_place=result.final_place,
+            awarded_points=result.awarded_points,
+        )
+        for result, participant in rows
+    ]
 
 
 @router.post("/events/{event_id}/register-self")
@@ -255,6 +377,7 @@ def register_self(event_id: str, payload: RegisterEventIn, db: Session = Depends
         raise HTTPException(status_code=404, detail="Event not found")
     if not event_registration_open(event):
         raise HTTPException(status_code=400, detail="Registration is closed")
+
     existing = (
         db.query(EventRegistration)
         .filter(
@@ -266,9 +389,22 @@ def register_self(event_id: str, payload: RegisterEventIn, db: Session = Depends
     )
     if existing:
         return {"ok": True, "status": "already_registered"}
-    registration = EventRegistration(event_id=event.id, participant_id=participant.id, discipline_title=payload.discipline_title, source="self")
+
+    registration = EventRegistration(
+        event_id=event.id,
+        participant_id=participant.id,
+        discipline_title=payload.discipline_title,
+        source="self",
+    )
     db.add(registration)
-    db.add(AuditLog(actor_user_id=user.id, entity_type="event_registration", action="register_self", payload=json.dumps({"eventId": event.id, "discipline": payload.discipline_title})))
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="event_registration",
+            action="register_self",
+            payload=json.dumps({"eventId": event.id, "discipline": payload.discipline_title}),
+        )
+    )
     db.commit()
     return {"ok": True, "status": "registered"}
 
@@ -283,18 +419,7 @@ def rating_top10(db: Session = Depends(get_db)):
         .limit(10)
         .all()
     )
-    return [
-        RatingItemOut(
-            rank=snapshot.rank_global or 0,
-            verum_global_id=participant.verum_global_id,
-            full_name=f"{participant.first_name} {participant.last_name}",
-            nickname=participant.nickname,
-            city=participant.city,
-            team=participant.team,
-            points=snapshot.total_points,
-        )
-        for snapshot, participant in rows
-    ]
+    return [_rating_item(snapshot, participant) for snapshot, participant in rows]
 
 
 @router.get("/ratings/global", response_model=list[RatingItemOut])
@@ -306,18 +431,13 @@ def rating_full(db: Session = Depends(get_db)):
         .order_by(RatingSnapshot.rank_global.asc())
         .all()
     )
-    return [
-        RatingItemOut(
-            rank=snapshot.rank_global or 0,
-            verum_global_id=participant.verum_global_id,
-            full_name=f"{participant.first_name} {participant.last_name}",
-            nickname=participant.nickname,
-            city=participant.city,
-            team=participant.team,
-            points=snapshot.total_points,
-        )
-        for snapshot, participant in rows
-    ]
+    return [_rating_item(snapshot, participant) for snapshot, participant in rows]
+
+
+@router.get("/participants", response_model=list[ParticipantSummaryOut])
+def participants(db: Session = Depends(get_db)):
+    rows = db.query(Participant).order_by(Participant.first_name.asc(), Participant.last_name.asc()).all()
+    return [_participant_summary(row) for row in rows]
 
 
 @router.get("/participants/me", response_model=ParticipantPrivateOut)
@@ -326,7 +446,27 @@ def participant_me(db: Session = Depends(get_db), user: User = Depends(_current_
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
     public = _participant_public(participant)
-    return ParticipantPrivateOut(**public.model_dump(), birth_date=participant.birth_date, email=user.email, phone=participant.phone)
+    return ParticipantPrivateOut(
+        **public.model_dump(),
+        birth_date=participant.birth_date,
+        email=user.email,
+        phone=participant.phone,
+    )
+
+
+@router.get("/participants/me/history", response_model=list[ParticipantHistoryItemOut])
+def participant_me_history(db: Session = Depends(get_db), user: User = Depends(_current_user)):
+    participant = db.query(Participant).filter(Participant.user_id == user.id).first()
+    if not participant:
+        raise HTTPException(status_code=404, detail="Participant not found")
+    rows = (
+        db.query(EventResult, Event)
+        .join(Event, Event.id == EventResult.event_id)
+        .filter(EventResult.participant_id == participant.id)
+        .order_by(Event.start_at.desc())
+        .all()
+    )
+    return [_history_item(result, event) for result, event in rows]
 
 
 @router.patch("/participants/me")
@@ -334,6 +474,7 @@ def update_participant_me(payload: ParticipantUpdateIn, db: Session = Depends(ge
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
+
     participant.first_name = payload.first_name
     participant.last_name = payload.last_name
     participant.nickname = payload.nickname
@@ -346,7 +487,16 @@ def update_participant_me(payload: ParticipantUpdateIn, db: Session = Depends(ge
     participant.phone = payload.phone
     participant.photo_url = payload.photo_url
     user.email = payload.email
-    db.add(AuditLog(actor_user_id=user.id, entity_type="participant", entity_id=participant.id, action="profile_updated", payload=json.dumps(payload.model_dump(mode="json"))))
+
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="participant",
+            entity_id=participant.id,
+            action="profile_updated",
+            payload=json.dumps(payload.model_dump(mode="json")),
+        )
+    )
     db.commit()
     return {"ok": True, "auditLogged": True, "adminNotified": True}
 
@@ -359,24 +509,16 @@ def participant_public(verum_global_id: str, db: Session = Depends(get_db)):
     return _participant_public(participant)
 
 
-@router.get("/participants/{verum_global_id}/history")
+@router.get("/participants/{verum_global_id}/history", response_model=list[ParticipantHistoryItemOut])
 def participant_history(verum_global_id: str, db: Session = Depends(get_db)):
     participant = db.query(Participant).filter(Participant.verum_global_id == verum_global_id).first()
     if not participant:
         raise HTTPException(status_code=404, detail="Participant not found")
-    history = []
-    for result in participant.results:
-        event = db.get(Event, result.event_id)
-        history.append(
-            {
-                "eventTitle": event.title if event else "",
-                "eventSlug": event.slug if event else "",
-                "date": event.start_at if event else None,
-                "disciplineTitle": result.discipline_title,
-                "qualifyingPlace": result.qualifying_place,
-                "topStage": result.top_stage,
-                "finalPlace": result.final_place,
-                "awardedPoints": result.awarded_points,
-            }
-        )
-    return history
+    rows = (
+        db.query(EventResult, Event)
+        .join(Event, Event.id == EventResult.event_id)
+        .filter(EventResult.participant_id == participant.id)
+        .order_by(Event.start_at.desc())
+        .all()
+    )
+    return [_history_item(result, event) for result, event in rows]

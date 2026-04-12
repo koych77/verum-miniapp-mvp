@@ -10,16 +10,24 @@ type LayoutProps = {
 };
 
 const tabs: { key: TabKey; label: string }[] = [
-  { key: "home", label: "Home" },
-  { key: "rating", label: "Rating" },
-  { key: "events", label: "Events" },
-  { key: "profile", label: "Profile" },
-  { key: "more", label: "More" }
+  { key: "home", label: "Главная" },
+  { key: "rating", label: "Рейтинг" },
+  { key: "events", label: "События" },
+  { key: "profile", label: "Профиль" },
+  { key: "more", label: "Ещё" }
 ];
 
 export function Layout({ activeTab, onTabChange, ticker, children }: LayoutProps) {
   return (
     <div className="app-shell">
+      <header className="top-brand">
+        <div className="brand-mark">V</div>
+        <div>
+          <strong>VERUM Connect</strong>
+          <span>Mini App платформы рейтинга</span>
+        </div>
+      </header>
+
       <div className="ticker-wrap">
         <div className="ticker-track">
           {[...ticker, ...ticker].map((item, index) => (
@@ -29,7 +37,9 @@ export function Layout({ activeTab, onTabChange, ticker, children }: LayoutProps
           ))}
         </div>
       </div>
+
       <main className="page-content">{children}</main>
+
       <nav className="bottom-bar">
         {tabs.map((tab) => (
           <button

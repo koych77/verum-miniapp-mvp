@@ -1,6 +1,4 @@
-const API_BASE =
-  (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
-  `${window.location.origin.replace(/\/$/, "")}/api/v1`;
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? `${window.location.origin.replace(/\/$/, "")}/api/v1`;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem("verum-demo-token");
@@ -45,6 +43,7 @@ export type RatingItem = {
   nickname: string;
   city: string;
   team: string;
+  gender: string;
   points: number;
 };
 
@@ -66,7 +65,22 @@ export type EventItem = {
   description: string;
   status: string;
   organizer_name: string;
+  registration_open: boolean;
+  participants_count: number;
+  results_count: number;
   disciplines: EventDiscipline[];
+};
+
+export type EventResult = {
+  participant_id: string;
+  verum_global_id: string;
+  full_name: string;
+  nickname: string;
+  discipline_title: string;
+  qualifying_place?: number | null;
+  top_stage?: string | null;
+  final_place?: number | null;
+  awarded_points: number;
 };
 
 export type ParticipantProfile = {
@@ -86,6 +100,28 @@ export type ParticipantProfile = {
   phone: string;
 };
 
+export type ParticipantSummary = {
+  verum_global_id: string;
+  full_name: string;
+  nickname: string;
+  gender: string;
+  city: string;
+  team: string;
+  school_name: string;
+  photo_url: string;
+};
+
+export type ParticipantHistoryItem = {
+  event_title: string;
+  event_slug: string;
+  date?: string | null;
+  discipline_title: string;
+  qualifying_place?: number | null;
+  top_stage?: string | null;
+  final_place?: number | null;
+  awarded_points: number;
+};
+
 export type ParticipantUpdate = {
   first_name: string;
   last_name: string;
@@ -101,12 +137,19 @@ export type ParticipantUpdate = {
   photo_url: string;
 };
 
+export type AuthStatus = {
+  role: string;
+  email: string;
+  telegram_username?: string | null;
+  email_verified: boolean;
+};
+
 declare global {
   interface Window {
     Telegram?: {
       WebApp?: {
-        ready: () => void;
-        expand: () => void;
+        ready?: () => void;
+        expand?: () => void;
         initData?: string;
       };
     };
@@ -118,25 +161,42 @@ export async function initAuth() {
   if (existing) {
     return existing;
   }
+
   const initData = window.Telegram?.WebApp?.initData || "demo";
   window.Telegram?.WebApp?.ready?.();
   window.Telegram?.WebApp?.expand?.();
+
   const data = await request<{ token: string }>("/auth/telegram/init", {
     method: "POST",
     body: JSON.stringify({ initData })
   });
+
   localStorage.setItem("verum-demo-token", data.token);
   return data.token;
 }
 
 export const api = {
+  getAuthMe: () => request<AuthStatus>("/auth/me"),
+  sendEmailCode: (email: string) =>
+    request<{ ok: boolean; delivery: string; code?: string }>("/auth/email/send-code", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    }),
+  verifyEmailCode: (email: string, code: string) =>
+    request<{ ok: boolean }>("/auth/email/verify-code", {
+      method: "POST",
+      body: JSON.stringify({ email, code })
+    }),
   getPartners: () => request<Partner[]>("/partners"),
   getPartnerTicker: () => request<Partner[]>("/partners/ticker"),
   getNews: () => request<NewsItem[]>("/news"),
   getTop10: () => request<RatingItem[]>("/ratings/global/top10"),
   getRatings: () => request<RatingItem[]>("/ratings/global"),
   getEvents: () => request<EventItem[]>("/events"),
+  getEventResults: (slug: string) => request<EventResult[]>(`/events/${slug}/results`),
+  getParticipants: () => request<ParticipantSummary[]>("/participants"),
   getProfile: () => request<ParticipantProfile>("/participants/me"),
+  getProfileHistory: () => request<ParticipantHistoryItem[]>("/participants/me/history"),
   updateProfile: (payload: ParticipantUpdate) =>
     request<{ ok: boolean; auditLogged: boolean; adminNotified: boolean }>("/participants/me", {
       method: "PATCH",

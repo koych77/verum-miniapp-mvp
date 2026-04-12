@@ -38,7 +38,22 @@ class EventOut(BaseModel):
     description: str
     status: str
     organizer_name: str
+    registration_open: bool
+    participants_count: int
+    results_count: int
     disciplines: list[DisciplineOut] = []
+
+
+class EventResultOut(BaseModel):
+    participant_id: str
+    verum_global_id: str
+    full_name: str
+    nickname: str
+    discipline_title: str
+    qualifying_place: int | None = None
+    top_stage: str | None = None
+    final_place: int | None = None
+    awarded_points: float
 
 
 class RatingItemOut(BaseModel):
@@ -48,6 +63,7 @@ class RatingItemOut(BaseModel):
     nickname: str
     city: str
     team: str
+    gender: str
     points: float
 
 
@@ -69,6 +85,28 @@ class ParticipantPrivateOut(ParticipantPublicOut):
     birth_date: date
     email: EmailStr
     phone: str
+
+
+class ParticipantSummaryOut(BaseModel):
+    verum_global_id: str
+    full_name: str
+    nickname: str
+    gender: str
+    city: str
+    team: str
+    school_name: str
+    photo_url: str
+
+
+class ParticipantHistoryItemOut(BaseModel):
+    event_title: str
+    event_slug: str
+    date: datetime | None = None
+    discipline_title: str
+    qualifying_place: int | None = None
+    top_stage: str | None = None
+    final_place: int | None = None
+    awarded_points: float
 
 
 class ParticipantUpdateIn(BaseModel):
@@ -107,3 +145,10 @@ class AuthOut(BaseModel):
     token: str
     role: str
     profile_status: str
+
+
+class AuthStatusOut(BaseModel):
+    role: str
+    email: EmailStr
+    telegram_username: str | None = None
+    email_verified: bool

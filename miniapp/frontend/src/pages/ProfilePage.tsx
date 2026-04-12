@@ -1,19 +1,23 @@
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 
-import { api, ParticipantProfile } from "../lib/api";
+import { api, AuthStatus, ParticipantHistoryItem, ParticipantProfile } from "../lib/api";
 import { SectionCard } from "../components/SectionCard";
 
 type ProfilePageProps = {
   profile: ParticipantProfile | null;
+  auth: AuthStatus | null;
+  history: ParticipantHistoryItem[];
   onProfileUpdated: (profile: ParticipantProfile) => void;
+  onAuthUpdated: (auth: AuthStatus) => void;
 };
 
-export function ProfilePage({ profile, onProfileUpdated }: ProfilePageProps) {
-  const [status, setStatus] = useState<string>("");
-  const birthDate = useMemo(() => profile?.birth_date ?? "", [profile]);
+export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUpdated }: ProfilePageProps) {
+  const [status, setStatus] = useState("");
+  const [verificationCode, setVerificationCode] = useState("");
+  const [devCode, setDevCode] = useState("");
 
-  if (!profile) {
-    return <SectionCard title="My profile">Loading profile...</SectionCard>;
+  if (!profile || !auth) {
+    return <SectionCard title="Мой профиль">Загружаем профиль...</SectionCard>;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -23,7 +27,7 @@ export function ProfilePage({ profile, onProfileUpdated }: ProfilePageProps) {
       first_name: String(formData.get("first_name") || ""),
       last_name: String(formData.get("last_name") || ""),
       nickname: String(formData.get("nickname") || ""),
-      birth_date: String(formData.get("birth_date") || birthDate),
+      birth_date: String(formData.get("birth_date") || profile.birth_date),
       gender: String(formData.get("gender") || ""),
       city: String(formData.get("city") || ""),
       team: String(formData.get("team") || ""),
@@ -36,15 +40,44 @@ export function ProfilePage({ profile, onProfileUpdated }: ProfilePageProps) {
 
     try {
       await api.updateProfile(nextProfile);
+      const nextBirth = new Date(nextProfile.birth_date);
+      const today = new Date();
+      let nextAge = today.getFullYear() - nextBirth.getFullYear();
+      if (today.getMonth() < nextBirth.getMonth() || (today.getMonth() === nextBirth.getMonth() && today.getDate() < nextBirth.getDate())) {
+        nextAge -= 1;
+      }
       onProfileUpdated({
         ...profile,
         ...nextProfile,
-        birth_date: nextProfile.birth_date,
-        verum_global_id: profile.verum_global_id
+        verum_global_id: profile.verum_global_id,
+        age: nextAge
       });
-      setStatus("Profile saved. Admin has been notified.");
+      onAuthUpdated({ ...auth, email: nextProfile.email });
+      setStatus("Профиль сохранён. Админ получит уведомление об изменениях.");
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Profile update failed.");
+      setStatus(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
+    }
+  }
+
+  async function handleSendCode() {
+    try {
+      const response = await api.sendEmailCode(auth.email);
+      setDevCode(response.code ?? "");
+      setStatus(response.code ? `Код отправлен. Тестовый код: ${response.code}` : "Код отправлен на email.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось отправить код.");
+    }
+  }
+
+  async function handleVerifyCode() {
+    try {
+      await api.verifyEmailCode(auth.email, verificationCode);
+      onAuthUpdated({ ...auth, email_verified: true });
+      setStatus("Email успешно подтвержден.");
+      setVerificationCode("");
+      setDevCode("");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Не удалось подтвердить код.");
     }
   }
 
@@ -53,86 +86,138 @@ export function ProfilePage({ profile, onProfileUpdated }: ProfilePageProps) {
       <section className="profile-hero">
         <img src={profile.photo_url} alt={`${profile.first_name} ${profile.last_name}`} />
         <div>
-          <span className="hero-label">MY PROFILE</span>
+          <span className="hero-label">МОЙ ПРОФИЛЬ</span>
           <h1>
             {profile.first_name} {profile.last_name}
           </h1>
           <p>
-            {profile.nickname} · {profile.age} years · {profile.city}
+            {profile.nickname} · {profile.age} лет · {profile.city}
           </p>
+          <div className="hero-badges">
+            <span className="status-pill open">VERUM ID {profile.verum_global_id}</span>
+            <span className={`status-pill ${auth.email_verified ? "open" : ""}`}>
+              {auth.email_verified ? "Email подтвержден" : "Email не подтвержден"}
+            </span>
+          </div>
         </div>
       </section>
 
-      <SectionCard title="Public card">
+      <SectionCard title="Публичная карточка" subtitle="Эти данные видят гости и другие участники">
         <div className="profile-grid">
-          <div><strong>Gender</strong><span>{profile.gender}</span></div>
-          <div><strong>Team</strong><span>{profile.team}</span></div>
-          <div><strong>Coach</strong><span>{profile.coach_name}</span></div>
-          <div><strong>School</strong><span>{profile.school_name}</span></div>
+          <div><strong>Пол</strong><span>{profile.gender}</span></div>
+          <div><strong>Город</strong><span>{profile.city}</span></div>
+          <div><strong>Команда</strong><span>{profile.team}</span></div>
+          <div><strong>Тренер</strong><span>{profile.coach_name}</span></div>
+          <div><strong>Школа</strong><span>{profile.school_name}</span></div>
+          <div><strong>Никнейм</strong><span>{profile.nickname}</span></div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Private data">
+      <SectionCard title="Приватные данные" subtitle="Видны только участнику и админу">
         <div className="profile-grid">
-          <div><strong>Email</strong><span>{profile.email}</span></div>
-          <div><strong>Phone</strong><span>{profile.phone}</span></div>
-          <div><strong>VERUM ID</strong><span>{profile.verum_global_id}</span></div>
+          <div><strong>Email</strong><span>{auth.email}</span></div>
+          <div><strong>Телефон</strong><span>{profile.phone}</span></div>
+          <div><strong>Telegram</strong><span>{auth.telegram_username || "Не указан"}</span></div>
+          <div><strong>Дата рождения</strong><span>{new Date(profile.birth_date).toLocaleDateString("ru-RU")}</span></div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Edit profile" subtitle="Changes save immediately and go to admin moderation log">
+      <SectionCard title="Подтверждение email" subtitle="Код подтверждения и статус привязки аккаунта">
         {status ? <div className="status-banner">{status}</div> : null}
+        <div className="verification-box">
+          <button type="button" className="secondary-button" onClick={() => void handleSendCode()}>
+            Отправить код на email
+          </button>
+          <div className="verification-row">
+            <input
+              className="search-input"
+              placeholder="Введите код подтверждения"
+              value={verificationCode}
+              onChange={(event) => setVerificationCode(event.target.value)}
+            />
+            <button type="button" className="primary-button" onClick={() => void handleVerifyCode()}>
+              Подтвердить
+            </button>
+          </div>
+          {devCode ? <div className="helper-text">Тестовый код для dev-режима: {devCode}</div> : null}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="История выступлений" subtitle="Какие мероприятия посетил и сколько баллов получил">
+        <div className="results-list">
+          {history.length ? (
+            history.map((item, index) => (
+              <div key={`${item.event_slug}-${index}`} className="result-row">
+                <div>
+                  <strong>{item.event_title}</strong>
+                  <span>
+                    {item.discipline_title} · {item.date ? new Date(item.date).toLocaleDateString("ru-RU") : "Дата уточняется"}
+                  </span>
+                </div>
+                <div className="result-meta">
+                  <span>{item.final_place ? `Место: ${item.final_place}` : item.top_stage || "Отбор"}</span>
+                  <strong>{item.awarded_points} баллов</strong>
+                </div>
+              </div>
+            ))
+          ) : (
+            <div className="empty-state">История выступлений пока пуста.</div>
+          )}
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Редактирование профиля" subtitle="Изменения сохраняются сразу и уходят в журнал модерации">
         <form className="profile-form" onSubmit={(event) => void handleSubmit(event)}>
           <label>
-            <span>First name</span>
+            <span>Имя</span>
             <input name="first_name" defaultValue={profile.first_name} />
           </label>
           <label>
-            <span>Last name</span>
+            <span>Фамилия</span>
             <input name="last_name" defaultValue={profile.last_name} />
           </label>
           <label>
-            <span>Nickname</span>
+            <span>Никнейм</span>
             <input name="nickname" defaultValue={profile.nickname} />
           </label>
           <label>
-            <span>Birth date</span>
-            <input name="birth_date" type="date" defaultValue={birthDate} />
+            <span>Дата рождения</span>
+            <input name="birth_date" type="date" defaultValue={profile.birth_date} />
           </label>
           <label>
-            <span>Gender</span>
+            <span>Пол</span>
             <input name="gender" defaultValue={profile.gender} />
           </label>
           <label>
-            <span>City</span>
+            <span>Город</span>
             <input name="city" defaultValue={profile.city} />
           </label>
           <label>
-            <span>Team</span>
+            <span>Команда</span>
             <input name="team" defaultValue={profile.team} />
           </label>
           <label>
-            <span>Coach</span>
+            <span>Тренер</span>
             <input name="coach_name" defaultValue={profile.coach_name} />
           </label>
           <label>
-            <span>School</span>
+            <span>Школа</span>
             <input name="school_name" defaultValue={profile.school_name} />
           </label>
           <label>
             <span>Email</span>
-            <input name="email" type="email" defaultValue={profile.email} />
+            <input name="email" type="email" defaultValue={auth.email} />
           </label>
           <label>
-            <span>Phone</span>
+            <span>Телефон</span>
             <input name="phone" defaultValue={profile.phone} />
           </label>
           <label className="profile-form-wide">
-            <span>Photo URL</span>
+            <span>Ссылка на фото</span>
             <input name="photo_url" defaultValue={profile.photo_url} />
           </label>
           <button type="submit" className="primary-button profile-form-wide">
-            Save profile
+            Сохранить профиль
           </button>
         </form>
       </SectionCard>

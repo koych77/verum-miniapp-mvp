@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { Layout } from "./components/Layout";
-import { api, EventItem, initAuth, NewsItem, ParticipantProfile, Partner, RatingItem } from "./lib/api";
+import {
+  api,
+  AuthStatus,
+  EventItem,
+  initAuth,
+  NewsItem,
+  ParticipantHistoryItem,
+  ParticipantProfile,
+  ParticipantSummary,
+  Partner,
+  RatingItem
+} from "./lib/api";
 import { EventsPage } from "./pages/EventsPage";
 import { HomePage } from "./pages/HomePage";
 import { MorePage } from "./pages/MorePage";
@@ -17,47 +28,62 @@ export default function App() {
   const [events, setEvents] = useState<EventItem[]>([]);
   const [top10, setTop10] = useState<RatingItem[]>([]);
   const [ratings, setRatings] = useState<RatingItem[]>([]);
+  const [participants, setParticipants] = useState<ParticipantSummary[]>([]);
   const [profile, setProfile] = useState<ParticipantProfile | null>(null);
+  const [history, setHistory] = useState<ParticipantHistoryItem[]>([]);
+  const [auth, setAuth] = useState<AuthStatus | null>(null);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     async function boot() {
       try {
+        setLoading(true);
         await initAuth();
-        const [partnerRows, newsRows, eventRows, topRows, ratingRows, profileRow] = await Promise.all([
-          api.getPartners(),
-          api.getNews(),
-          api.getEvents(),
-          api.getTop10(),
-          api.getRatings(),
-          api.getProfile()
-        ]);
+        const [authRow, partnerRows, newsRows, eventRows, topRows, ratingRows, profileRow, historyRows, participantRows] =
+          await Promise.all([
+            api.getAuthMe(),
+            api.getPartners(),
+            api.getNews(),
+            api.getEvents(),
+            api.getTop10(),
+            api.getRatings(),
+            api.getProfile(),
+            api.getProfileHistory(),
+            api.getParticipants()
+          ]);
+        setAuth(authRow);
         setPartners(partnerRows);
         setNews(newsRows);
         setEvents(eventRows);
         setTop10(topRows);
         setRatings(ratingRows);
         setProfile(profileRow);
+        setHistory(historyRows);
+        setParticipants(participantRows);
       } catch (appError) {
-        const message = appError instanceof Error ? appError.message : "Unexpected Mini App error";
+        const message = appError instanceof Error ? appError.message : "Ошибка запуска Mini App";
         setError(message);
+      } finally {
+        setLoading(false);
       }
     }
 
     void boot();
   }, []);
 
-  const ticker = useMemo(() => partners.map((partner) => partner.name), [partners]);
+  const ticker = useMemo(() => partners.map((partner) => partner.name.toUpperCase()), [partners]);
 
-  let content = <HomePage partners={partners} news={news} events={events} top10={top10} />;
+  let content = <HomePage partners={partners} news={news} events={events} top10={top10} profile={profile} />;
   if (activeTab === "rating") content = <RatingPage ratings={ratings} />;
   if (activeTab === "events") content = <EventsPage events={events} />;
-  if (activeTab === "profile") content = <ProfilePage profile={profile} onProfileUpdated={setProfile} />;
-  if (activeTab === "more") content = <MorePage />;
+  if (activeTab === "profile")
+    content = <ProfilePage profile={profile} auth={auth} history={history} onProfileUpdated={setProfile} onAuthUpdated={setAuth} />;
+  if (activeTab === "more") content = <MorePage partners={partners} participants={participants} auth={auth} />;
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab} ticker={ticker.length ? ticker : ["VERUM", "PARTNERS", "MINI APP"]}>
-      {error ? <div className="error-banner">{error}</div> : content}
+    <Layout activeTab={activeTab} onTabChange={setActiveTab} ticker={ticker.length ? ticker : ["VERUM", "PARTNERS", "RATING", "EVENTS"]}>
+      {loading ? <div className="loading-screen">Загружаем VERUM Mini App...</div> : error ? <div className="error-banner">{error}</div> : content}
     </Layout>
   );
 }
