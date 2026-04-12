@@ -35,7 +35,7 @@ export function Layout({ activeTab, onTabChange, partnerLogos, profileTabLabel, 
         { name: "VERUM", logoUrl: "", websiteUrl: "#" }
       ];
   const tickerItems: PartnerLogo[] = [...baseTickerItems];
-  while (tickerItems.length < 10) {
+  while (tickerItems.length < 12) {
     tickerItems.push(...baseTickerItems);
   }
   const logoSrc = `${import.meta.env.BASE_URL}verum-wordmark.png`;
@@ -58,6 +58,11 @@ export function Layout({ activeTab, onTabChange, partnerLogos, profileTabLabel, 
           <div className="ticker-track" aria-hidden="true">
             {tickerItems.map((partner, index) => (
               <TickerCard key={`${partner.name}-clone-${index}`} partner={partner} />
+            ))}
+          </div>
+          <div className="ticker-track" aria-hidden="true">
+            {tickerItems.map((partner, index) => (
+              <TickerCard key={`${partner.name}-clone-2-${index}`} partner={partner} />
             ))}
           </div>
         </div>
