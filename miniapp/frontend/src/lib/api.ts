@@ -1,10 +1,91 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? `${window.location.origin.replace(/\/$/, "")}/api/v1`;
 const TOKEN_KEY = "verum-demo-token";
+const APP_VERSION_KEY = "verum-app-version";
+const APP_RELOAD_MARKER_KEY = "verum-app-reload-marker";
+const VERSION_POLL_INTERVAL_MS = 45_000;
 
 let reauthPromise: Promise<string> | null = null;
+let versionWatcherStarted = false;
 
 function getInitData() {
   return window.Telegram?.WebApp?.initData || "demo";
+}
+
+function currentUrlWithVersion(version: string) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("v", version.slice(0, 12));
+  return url.toString();
+}
+
+async function syncAppVersion() {
+  try {
+    const response = await fetch(`${API_BASE}/meta`, {
+      cache: "no-store",
+      headers: {
+        "Cache-Control": "no-cache"
+      }
+    });
+
+    if (!response.ok) {
+      return;
+    }
+
+    const data = (await response.json()) as { appVersion?: string };
+    const nextVersion = data.appVersion?.trim();
+    if (!nextVersion) {
+      return;
+    }
+
+    const previousVersion = localStorage.getItem(APP_VERSION_KEY);
+    const reloadMarker = sessionStorage.getItem(APP_RELOAD_MARKER_KEY);
+
+    if (previousVersion && previousVersion !== nextVersion && reloadMarker !== nextVersion) {
+      sessionStorage.setItem(APP_RELOAD_MARKER_KEY, nextVersion);
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.setItem(APP_VERSION_KEY, nextVersion);
+      window.location.replace(currentUrlWithVersion(nextVersion));
+      return;
+    }
+
+    localStorage.setItem(APP_VERSION_KEY, nextVersion);
+    if (reloadMarker === nextVersion) {
+      sessionStorage.removeItem(APP_RELOAD_MARKER_KEY);
+    }
+  } catch {
+    // Version sync is best-effort and should never block the app bootstrap.
+  }
+}
+
+function startVersionWatcher() {
+  if (versionWatcherStarted) {
+    return;
+  }
+  versionWatcherStarted = true;
+  window.setInterval(() => {
+    void syncAppVersion();
+  }, VERSION_POLL_INTERVAL_MS);
+}
+
+function initTelegramWebApp() {
+  const webApp = window.Telegram?.WebApp;
+  if (!webApp) {
+    return;
+  }
+
+  webApp.ready?.();
+  webApp.expand?.();
+  webApp.disableVerticalSwipes?.();
+
+  try {
+    const fullscreenResult = webApp.requestFullscreen?.();
+    if (fullscreenResult && typeof (fullscreenResult as Promise<void>).catch === "function") {
+      void (fullscreenResult as Promise<void>).catch(() => {
+        webApp.expand?.();
+      });
+    }
+  } catch {
+    webApp.expand?.();
+  }
 }
 
 function parseErrorMessage(raw: string, status: number) {
@@ -48,8 +129,7 @@ async function ensureSession(force = false) {
     if (force) {
       localStorage.removeItem(TOKEN_KEY);
     }
-    window.Telegram?.WebApp?.ready?.();
-    window.Telegram?.WebApp?.expand?.();
+    initTelegramWebApp();
     reauthPromise = createSessionToken().finally(() => {
       reauthPromise = null;
     });
@@ -213,10 +293,19 @@ declare global {
       WebApp?: {
         ready?: () => void;
         expand?: () => void;
+        requestFullscreen?: () => void | Promise<void>;
+        disableVerticalSwipes?: () => void;
         initData?: string;
       };
     };
   }
+}
+
+export async function bootstrapMiniApp() {
+  initTelegramWebApp();
+  await syncAppVersion();
+  initTelegramWebApp();
+  startVersionWatcher();
 }
 
 export async function initAuth() {

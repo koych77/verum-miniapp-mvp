@@ -14,6 +14,12 @@ from app.db.base import Base
 from app.db.session import SessionLocal, engine
 from app.services.bootstrap import seed_database
 
+FRONTEND_SHELL_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+    "Expires": "0",
+}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -44,17 +50,21 @@ if frontend_assets.exists():
     app.mount("/assets", StaticFiles(directory=frontend_assets), name="assets")
 
 
+def frontend_shell_response(path: Path) -> FileResponse:
+    return FileResponse(path, headers=FRONTEND_SHELL_HEADERS)
+
+
 @app.get("/", include_in_schema=False)
 def root():
     if frontend_index.exists():
-        return RedirectResponse(url="/miniapp")
+        return RedirectResponse(url="/miniapp", headers=FRONTEND_SHELL_HEADERS)
     return {"app": settings.app_name, "docs": "/docs", "health": "/api/v1/health"}
 
 
 @app.get("/miniapp", include_in_schema=False)
 def miniapp_entry():
     if frontend_index.exists():
-        return FileResponse(frontend_index)
+        return frontend_shell_response(frontend_index)
     raise HTTPException(status_code=404, detail="Frontend bundle not found")
 
 
@@ -64,5 +74,5 @@ def spa_fallback(full_path: str):
     if requested.exists() and requested.is_file() and requested != frontend_index:
         return FileResponse(requested)
     if frontend_index.exists():
-        return FileResponse(frontend_index)
+        return frontend_shell_response(frontend_index)
     raise HTTPException(status_code=404, detail="Frontend bundle not found")

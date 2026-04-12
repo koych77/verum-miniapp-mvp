@@ -225,6 +225,11 @@ def health():
     return {"ok": True}
 
 
+@router.get("/meta")
+def meta():
+    return {"appVersion": settings.app_version}
+
+
 @router.post("/auth/telegram/init", response_model=AuthOut)
 def telegram_init(payload: TelegramInitIn, db: Session = Depends(get_db)):
     telegram_payload = _telegram_auth_payload(payload.initData)

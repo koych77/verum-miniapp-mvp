@@ -1,3 +1,6 @@
+import os
+from datetime import datetime, UTC
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +16,7 @@ class Settings(BaseSettings):
     admin_email: str = "admin@verum.app"
     frontend_dist_dir: str = "/app/frontend_dist"
     enable_bot_polling: bool = True
+    app_version: str = os.getenv("APP_VERSION") or os.getenv("RAILWAY_GIT_COMMIT_SHA") or os.getenv("RAILWAY_DEPLOYMENT_ID") or datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
