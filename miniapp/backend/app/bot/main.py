@@ -40,16 +40,16 @@ def build_open_app_markup(bot_username: str | None) -> InlineKeyboardBuilder:
     kb = InlineKeyboardBuilder()
     fullscreen_link = build_fullscreen_miniapp_link(bot_username)
     if fullscreen_link:
-        kb.row(InlineKeyboardButton(text="Открыть VERUM Mini App", url=fullscreen_link))
+        kb.row(InlineKeyboardButton(text="Открыть VERUM", url=fullscreen_link))
     else:
-        kb.button(text="Открыть VERUM Mini App", web_app=WebAppInfo(url=settings.telegram_webapp_url))
+        kb.button(text="Открыть VERUM", web_app=WebAppInfo(url=settings.telegram_webapp_url))
     return kb
 
 
 async def start_handler(message: Message) -> None:
     me = await message.bot.get_me()
     await message.answer(
-        "Открой VERUM Mini App по кнопке ниже. Этот запуск ведёт в правильный fullscreen-сценарий Telegram.",
+        "VERUM единая судейская система",
         reply_markup=build_open_app_markup(me.username).as_markup(),
     )
 
