@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 
 type TabKey = "home" | "rating" | "events" | "profile" | "more";
 
@@ -24,7 +24,14 @@ const tabs: { key: TabKey; label: string }[] = [
 ];
 
 export function Layout({ activeTab, onTabChange, partnerLogos, children }: LayoutProps) {
-  const tickerItems = partnerLogos.length ? [...partnerLogos, ...partnerLogos] : [];
+  const tickerItems = partnerLogos.length
+    ? partnerLogos
+    : [
+        { name: "VERUM", logoUrl: "", websiteUrl: "#" },
+        { name: "VERUM", logoUrl: "", websiteUrl: "#" },
+        { name: "VERUM", logoUrl: "", websiteUrl: "#" },
+        { name: "VERUM", logoUrl: "", websiteUrl: "#" }
+      ];
   const logoSrc = `${import.meta.env.BASE_URL}verum-logo-white.png`;
 
   return (
@@ -36,19 +43,17 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
       </header>
 
       <div className="ticker-wrap" aria-label="РџР°СЂС‚РЅРµСЂС‹ VERUM">
-        <div className="ticker-track">
-          {tickerItems.map((partner, index) => (
-            <a
-              key={`${partner.name}-${index}`}
-              className="ticker-logo-link"
-              href={partner.websiteUrl}
-              target="_blank"
-              rel="noreferrer"
-              aria-label={partner.name}
-            >
-              <img className="ticker-logo" src={partner.logoUrl} alt={partner.name} />
-            </a>
-          ))}
+        <div className="ticker-marquee">
+          <div className="ticker-track">
+            {tickerItems.map((partner, index) => (
+              <TickerCard key={`${partner.name}-${index}`} partner={partner} />
+            ))}
+          </div>
+          <div className="ticker-track" aria-hidden="true">
+            {tickerItems.map((partner, index) => (
+              <TickerCard key={`${partner.name}-clone-${index}`} partner={partner} />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -68,5 +73,30 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
         ))}
       </nav>
     </div>
+  );
+}
+
+type TickerCardProps = {
+  partner: PartnerLogo;
+};
+
+function TickerCard({ partner }: TickerCardProps) {
+  const [imageFailed, setImageFailed] = useState(false);
+  const showFallback = !partner.logoUrl || imageFailed;
+
+  const content = showFallback ? (
+    <span className="ticker-fallback">{partner.name || "VERUM"}</span>
+  ) : (
+    <img className="ticker-logo" src={partner.logoUrl} alt={partner.name} onError={() => setImageFailed(true)} />
+  );
+
+  if (!partner.websiteUrl || partner.websiteUrl === "#") {
+    return <div className="ticker-logo-link ticker-logo-static">{content}</div>;
+  }
+
+  return (
+    <a className="ticker-logo-link" href={partner.websiteUrl} target="_blank" rel="noreferrer" aria-label={partner.name}>
+      {content}
+    </a>
   );
 }

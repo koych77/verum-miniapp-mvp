@@ -105,26 +105,37 @@ button {
   z-index: 31;
 }
 
-.ticker-track {
+.ticker-marquee {
   display: flex;
   width: max-content;
-  animation: ticker 24s linear infinite;
+  min-width: 100%;
+  animation: ticker 28s linear infinite;
+}
+
+.ticker-track {
+  display: flex;
+  flex: 0 0 auto;
   align-items: center;
   height: 100%;
-  padding: 0 10px;
+  gap: 16px;
+  padding: 0 8px;
 }
 
 .ticker-logo-link {
   flex: 0 0 auto;
   width: 112px;
   height: 34px;
-  margin: 0 8px;
   padding: 6px 10px;
   display: grid;
   place-items: center;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 186, 102, 0.1);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+  border: 1px solid rgba(255, 186, 102, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.ticker-logo-static {
+  cursor: default;
 }
 
 .ticker-logo {
@@ -132,6 +143,16 @@ button {
   height: 100%;
   object-fit: contain;
   object-position: center;
+}
+
+.ticker-fallback {
+  color: #fffaf5;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  padding-left: 0.34em;
 }
 
 .page-content {
@@ -690,6 +711,13 @@ button {
 
   .ticker-logo-link {
     width: 96px;
-    margin: 0 6px;
+  }
+
+  .ticker-track {
+    gap: 12px;
+  }
+
+  .ticker-fallback {
+    font-size: 11px;
   }
 }
