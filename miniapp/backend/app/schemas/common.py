@@ -152,3 +152,35 @@ class AuthStatusOut(BaseModel):
     email: EmailStr
     telegram_username: str | None = None
     email_verified: bool
+
+
+class AdminStatsOut(BaseModel):
+    total_participants: int
+    total_events: int
+    open_events: int
+    total_partners: int
+    total_registrations: int
+    pending_email_verification: int
+
+
+class AdminRecentRegistrationOut(BaseModel):
+    participant_name: str
+    participant_verum_global_id: str
+    event_title: str
+    discipline_title: str
+    source: str
+    created_at: datetime
+
+
+class AdminRecentActivityOut(BaseModel):
+    action: str
+    entity_type: str
+    actor_label: str
+    created_at: datetime
+    payload: str
+
+
+class AdminOverviewOut(BaseModel):
+    stats: AdminStatsOut
+    recent_registrations: list[AdminRecentRegistrationOut]
+    recent_activity: list[AdminRecentActivityOut]

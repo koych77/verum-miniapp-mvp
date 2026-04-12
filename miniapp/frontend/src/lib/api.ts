@@ -91,7 +91,7 @@ function initTelegramWebApp() {
 function parseErrorMessage(raw: string, status: number) {
   try {
     const parsed = JSON.parse(raw) as { detail?: string };
-    if (parsed.detail === "Invalid token") {
+    if (parsed.detail === "Сессия устарела. Открой Mini App заново.") {
       return "Сессия обновляется. Попробуй ещё раз через секунду.";
     }
     return parsed.detail || raw || `HTTP ${status}`;
@@ -287,6 +287,38 @@ export type AuthStatus = {
   email_verified: boolean;
 };
 
+export type AdminStats = {
+  total_participants: number;
+  total_events: number;
+  open_events: number;
+  total_partners: number;
+  total_registrations: number;
+  pending_email_verification: number;
+};
+
+export type AdminRecentRegistration = {
+  participant_name: string;
+  participant_verum_global_id: string;
+  event_title: string;
+  discipline_title: string;
+  source: string;
+  created_at: string;
+};
+
+export type AdminRecentActivity = {
+  action: string;
+  entity_type: string;
+  actor_label: string;
+  created_at: string;
+  payload: string;
+};
+
+export type AdminOverview = {
+  stats: AdminStats;
+  recent_registrations: AdminRecentRegistration[];
+  recent_activity: AdminRecentActivity[];
+};
+
 declare global {
   interface Window {
     Telegram?: {
@@ -324,6 +356,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ email, code })
     }),
+  getAdminOverview: () => request<AdminOverview>("/admin/overview"),
   getPartners: () => request<Partner[]>("/partners"),
   getPartnerTicker: () => request<Partner[]>("/partners/ticker"),
   getNews: () => request<NewsItem[]>("/news"),

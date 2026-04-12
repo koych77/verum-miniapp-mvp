@@ -12,6 +12,7 @@ type LayoutProps = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
   partnerLogos: PartnerLogo[];
+  profileTabLabel?: string;
   children: ReactNode;
 };
 
@@ -23,7 +24,8 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "more", label: "\u0415\u0449\u0451" }
 ];
 
-export function Layout({ activeTab, onTabChange, partnerLogos, children }: LayoutProps) {
+export function Layout({ activeTab, onTabChange, partnerLogos, profileTabLabel, children }: LayoutProps) {
+  const resolvedTabs = tabs.map((tab) => (tab.key === "profile" && profileTabLabel ? { ...tab, label: profileTabLabel } : tab));
   const baseTickerItems = partnerLogos.length
     ? partnerLogos
     : [
@@ -64,7 +66,7 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
       <main className="page-content">{children}</main>
 
       <nav className="bottom-bar">
-        {tabs.map((tab) => (
+        {resolvedTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"

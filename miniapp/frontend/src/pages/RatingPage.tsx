@@ -22,11 +22,11 @@ export function RatingPage({ ratings }: { ratings: RatingItem[] }) {
   }, [gender, ratings, search]);
 
   return (
-    <SectionCard title="Общий рейтинг" subtitle="Фильтрация по полу и быстрый поиск по участникам">
+    <SectionCard title="Общий рейтинг" subtitle="Поиск по имени, нику, городу или команде и фильтр по полу">
       <div className="filters-row">
         <input
           className="search-input"
-          placeholder="Поиск по имени, нику, городу или команде"
+          placeholder="Найти участника"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -44,18 +44,22 @@ export function RatingPage({ ratings }: { ratings: RatingItem[] }) {
       </div>
 
       <div className="rating-list">
-        {filtered.map((item) => (
-          <div key={item.verum_global_id} className="rating-row rating-row-wide">
-            <div className="rating-rank">{item.rank}</div>
-            <div className="rating-main">
-              <strong>{item.full_name}</strong>
-              <span>
-                {item.nickname} · {item.city} · {item.team}
-              </span>
+        {filtered.length ? (
+          filtered.map((item) => (
+            <div key={item.verum_global_id} className="rating-row rating-row-wide">
+              <div className="rating-rank">{item.rank}</div>
+              <div className="rating-main">
+                <strong>{item.full_name}</strong>
+                <span>
+                  {item.nickname} · {item.city} · {item.team}
+                </span>
+              </div>
+              <div className="rating-points">{item.points}</div>
             </div>
-            <div className="rating-points">{item.points}</div>
-          </div>
-        ))}
+          ))
+        ) : (
+          <div className="empty-state">По текущему фильтру участников не найдено.</div>
+        )}
       </div>
     </SectionCard>
   );

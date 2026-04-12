@@ -14,6 +14,10 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.entities import AuditLog, Event, EventRegistration, EventResult, News, Partner, Participant, RatingSnapshot, User
 from app.schemas.common import (
+    AdminActivityOut,
+    AdminOverviewOut,
+    AdminRecentRegistrationOut,
+    AdminStatsOut,
     AuthOut,
     AuthStatusOut,
     DisciplineOut,
@@ -37,6 +41,10 @@ from app.services.bootstrap import compute_age, event_registration_open
 router = APIRouter(prefix="/api/v1")
 EMAIL_CODES: dict[str, str] = {}
 TOKENS: dict[str, str] = {}
+
+
+def _json_payload(payload: object) -> str:
+    return json.dumps(payload, ensure_ascii=False, default=str)
 
 
 def _participant_public(participant: Participant) -> ParticipantPublicOut:
@@ -127,22 +135,22 @@ def _telegram_auth_payload(init_data: str | None) -> dict:
     if not init_data or init_data == "demo":
         return {}
     if not settings.telegram_bot_token:
-        raise HTTPException(status_code=500, detail="Telegram bot token is not configured")
+        raise HTTPException(status_code=500, detail="Не настроен токен Telegram-бота.")
 
     pairs = dict(parse_qsl(init_data, keep_blank_values=True))
     provided_hash = pairs.pop("hash", None)
     if not provided_hash:
-        raise HTTPException(status_code=401, detail="Missing Telegram signature")
+        raise HTTPException(status_code=401, detail="Подпись Telegram не найдена.")
 
     data_check_string = "\n".join(f"{key}={pairs[key]}" for key in sorted(pairs))
     secret_key = hmac.new(b"WebAppData", settings.telegram_bot_token.encode("utf-8"), hashlib.sha256).digest()
     expected_hash = hmac.new(secret_key, data_check_string.encode("utf-8"), hashlib.sha256).hexdigest()
     if not hmac.compare_digest(expected_hash, provided_hash):
-        raise HTTPException(status_code=401, detail="Invalid Telegram signature")
+        raise HTTPException(status_code=401, detail="Telegram-подпись не прошла проверку.")
 
     user_payload = pairs.get("user")
     if not user_payload:
-        raise HTTPException(status_code=401, detail="Telegram user payload missing")
+        raise HTTPException(status_code=401, detail="В initData нет данных пользователя Telegram.")
     return json.loads(user_payload)
 
 
@@ -209,15 +217,29 @@ def _send_code_email(email: str, code: str) -> str:
 
 def _current_user(authorization: str | None = Header(default=None), db: Session = Depends(get_db)) -> User:
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing auth token")
+        raise HTTPException(status_code=401, detail="Нужна авторизация.")
     token = authorization.replace("Bearer ", "", 1).strip()
     user_id = TOKENS.get(token)
     if not user_id:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Сессия устарела. Открой Mini App заново.")
     user = db.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="Пользователь не найден.")
     return user
+
+
+def _require_admin(user: User = Depends(_current_user)) -> User:
+    if user.role != "admin":
+        raise HTTPException(status_code=403, detail="Этот раздел доступен только администратору.")
+    return user
+
+
+def _actor_label_for_activity(actor_user_id: str | None, actors: dict[str, User]) -> str:
+    if not actor_user_id or actor_user_id not in actors:
+        return "Система"
+
+    actor = actors[actor_user_id]
+    return actor.telegram_username or actor.email
 
 
 @router.get("/health")
@@ -238,7 +260,7 @@ def telegram_init(payload: TelegramInitIn, db: Session = Depends(get_db)):
     else:
         user = db.query(User).filter(User.role == "participant").first()
         if not user:
-            raise HTTPException(status_code=404, detail="Demo user missing")
+            raise HTTPException(status_code=404, detail="Демо-пользователь не найден.")
 
     token = secrets.token_urlsafe(24)
     TOKENS[token] = user.id
@@ -247,10 +269,10 @@ def telegram_init(payload: TelegramInitIn, db: Session = Depends(get_db)):
             actor_user_id=user.id,
             entity_type="auth",
             action="telegram_init",
-            payload=json.dumps(
+            payload=_json_payload(
                 {
-                    "hasInitData": bool(payload.initData and payload.initData != "demo"),
-                    "telegramUsername": user.telegram_username,
+                    "has_init_data": bool(payload.initData and payload.initData != "demo"),
+                    "telegram_username": user.telegram_username,
                 }
             ),
         )
@@ -264,7 +286,7 @@ def send_email_code(payload: EmailSendIn, db: Session = Depends(get_db), user: U
     code = "".join(secrets.choice("0123456789") for _ in range(6))
     EMAIL_CODES[payload.email] = code
     delivery = _send_code_email(payload.email, code)
-    db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="send_code", payload=json.dumps({"email": payload.email})))
+    db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="send_code", payload=_json_payload({"email": payload.email})))
     db.commit()
     response = {"ok": True, "delivery": delivery}
     if settings.environment != "production":
@@ -275,10 +297,10 @@ def send_email_code(payload: EmailSendIn, db: Session = Depends(get_db), user: U
 @router.post("/auth/email/verify-code")
 def verify_email_code(payload: EmailVerifyIn, db: Session = Depends(get_db), user: User = Depends(_current_user)):
     if EMAIL_CODES.get(payload.email) != payload.code:
-        raise HTTPException(status_code=400, detail="Invalid code")
+        raise HTTPException(status_code=400, detail="Неверный код подтверждения.")
     user.email = payload.email
     user.email_verified = True
-    db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="verify_code", payload=json.dumps({"email": payload.email})))
+    db.add(AuditLog(actor_user_id=user.id, entity_type="email_verification", action="verify_code", payload=_json_payload({"email": payload.email})))
     db.commit()
     return {"ok": True}
 
@@ -291,6 +313,57 @@ def auth_me(user: User = Depends(_current_user)):
         telegram_username=user.telegram_username,
         email_verified=user.email_verified,
     )
+
+
+@router.get("/admin/overview", response_model=AdminOverviewOut)
+def admin_overview(db: Session = Depends(get_db), user: User = Depends(_require_admin)):
+    del user
+    total_events = db.query(Event).count()
+    open_events = sum(1 for event in db.query(Event).all() if event_registration_open(event))
+    stats = AdminStatsOut(
+        total_participants=db.query(Participant).count(),
+        total_events=total_events,
+        open_events=open_events,
+        total_partners=db.query(Partner).count(),
+        total_registrations=db.query(EventRegistration).count(),
+        pending_email_verification=db.query(User).filter(User.role == "participant", User.email_verified.is_(False)).count(),
+    )
+
+    registrations = (
+        db.query(EventRegistration, Participant, Event)
+        .join(Participant, Participant.id == EventRegistration.participant_id)
+        .join(Event, Event.id == EventRegistration.event_id)
+        .order_by(EventRegistration.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    recent_registrations = [
+        AdminRecentRegistrationOut(
+            participant_name=f"{participant.first_name} {participant.last_name}",
+            participant_verum_global_id=participant.verum_global_id,
+            event_title=event.title,
+            discipline_title=registration.discipline_title,
+            source=registration.source,
+            created_at=registration.created_at,
+        )
+        for registration, participant, event in registrations
+    ]
+
+    audit_rows = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(8).all()
+    actor_ids = {row.actor_user_id for row in audit_rows if row.actor_user_id}
+    actors = {actor.id: actor for actor in db.query(User).filter(User.id.in_(actor_ids)).all()} if actor_ids else {}
+    recent_activity = [
+        AdminActivityOut(
+            action=row.action,
+            entity_type=row.entity_type,
+            actor_label=_actor_label_for_activity(row.actor_user_id, actors),
+            created_at=row.created_at,
+            payload=row.payload,
+        )
+        for row in audit_rows
+    ]
+
+    return AdminOverviewOut(stats=stats, recent_registrations=recent_registrations, recent_activity=recent_activity)
 
 
 @router.get("/partners/ticker", response_model=list[PartnerOut])
@@ -309,7 +382,7 @@ def partners(db: Session = Depends(get_db)):
 def partner_detail(slug: str, db: Session = Depends(get_db)):
     partner = db.query(Partner).filter(Partner.slug == slug).first()
     if not partner:
-        raise HTTPException(status_code=404, detail="Partner not found")
+        raise HTTPException(status_code=404, detail="Партнёр не найден.")
     return PartnerOut.model_validate(partner, from_attributes=True)
 
 
@@ -339,7 +412,7 @@ def event_by_slug(slug: str, db: Session = Depends(get_db)):
         .first()
     )
     if not row:
-        raise HTTPException(status_code=404, detail="Event not found")
+        raise HTTPException(status_code=404, detail="Событие не найдено.")
     return _event_out(row)
 
 
@@ -347,7 +420,7 @@ def event_by_slug(slug: str, db: Session = Depends(get_db)):
 def event_results(slug: str, db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.slug == slug).first()
     if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+        raise HTTPException(status_code=404, detail="Событие не найдено.")
 
     rows = (
         db.query(EventResult, Participant)
@@ -376,12 +449,12 @@ def event_results(slug: str, db: Session = Depends(get_db)):
 def register_self(event_id: str, payload: RegisterEventIn, db: Session = Depends(get_db), user: User = Depends(_current_user)):
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
+        raise HTTPException(status_code=404, detail="Профиль участника не найден.")
     event = db.get(Event, event_id)
     if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
+        raise HTTPException(status_code=404, detail="Событие не найдено.")
     if not event_registration_open(event):
-        raise HTTPException(status_code=400, detail="Registration is closed")
+        raise HTTPException(status_code=400, detail="Регистрация на это событие уже закрыта.")
 
     existing = (
         db.query(EventRegistration)
@@ -407,7 +480,7 @@ def register_self(event_id: str, payload: RegisterEventIn, db: Session = Depends
             actor_user_id=user.id,
             entity_type="event_registration",
             action="register_self",
-            payload=json.dumps({"eventId": event.id, "discipline": payload.discipline_title}),
+            payload=_json_payload({"event_id": event.id, "discipline_title": payload.discipline_title}),
         )
     )
     db.commit()
@@ -449,7 +522,7 @@ def participants(db: Session = Depends(get_db)):
 def participant_me(db: Session = Depends(get_db), user: User = Depends(_current_user)):
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
+        raise HTTPException(status_code=404, detail="Профиль участника не найден.")
     public = _participant_public(participant)
     return ParticipantPrivateOut(
         **public.model_dump(),
@@ -463,7 +536,7 @@ def participant_me(db: Session = Depends(get_db), user: User = Depends(_current_
 def participant_me_history(db: Session = Depends(get_db), user: User = Depends(_current_user)):
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
+        raise HTTPException(status_code=404, detail="История участника недоступна.")
     rows = (
         db.query(EventResult, Event)
         .join(Event, Event.id == EventResult.event_id)
@@ -478,7 +551,7 @@ def participant_me_history(db: Session = Depends(get_db), user: User = Depends(_
 def update_participant_me(payload: ParticipantUpdateIn, db: Session = Depends(get_db), user: User = Depends(_current_user)):
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
+        raise HTTPException(status_code=404, detail="Профиль участника не найден.")
 
     participant.first_name = payload.first_name
     participant.last_name = payload.last_name
@@ -499,7 +572,7 @@ def update_participant_me(payload: ParticipantUpdateIn, db: Session = Depends(ge
             entity_type="participant",
             entity_id=participant.id,
             action="profile_updated",
-            payload=json.dumps(payload.model_dump(mode="json")),
+            payload=_json_payload(payload.model_dump(mode="json")),
         )
     )
     db.commit()
@@ -510,7 +583,7 @@ def update_participant_me(payload: ParticipantUpdateIn, db: Session = Depends(ge
 def participant_public(verum_global_id: str, db: Session = Depends(get_db)):
     participant = db.query(Participant).filter(Participant.verum_global_id == verum_global_id).first()
     if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
+        raise HTTPException(status_code=404, detail="Участник не найден.")
     return _participant_public(participant)
 
 
@@ -518,7 +591,7 @@ def participant_public(verum_global_id: str, db: Session = Depends(get_db)):
 def participant_history(verum_global_id: str, db: Session = Depends(get_db)):
     participant = db.query(Participant).filter(Participant.verum_global_id == verum_global_id).first()
     if not participant:
-        raise HTTPException(status_code=404, detail="Participant not found")
+        raise HTTPException(status_code=404, detail="Участник не найден.")
     rows = (
         db.query(EventResult, Event)
         .join(Event, Event.id == EventResult.event_id)

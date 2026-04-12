@@ -178,6 +178,11 @@ button {
   gap: 16px;
 }
 
+.hero-copy {
+  display: grid;
+  gap: 0;
+}
+
 .hero-label {
   display: inline-block;
   font-size: 11px;
@@ -276,6 +281,19 @@ button {
 .news-card h3,
 .event-card h3 {
   margin: 0 0 8px;
+}
+
+.partner-card a,
+.partner-inline a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 173, 76, 0.18);
+  background: rgba(255, 173, 76, 0.08);
+  text-decoration: none;
 }
 
 .event-list-top,
@@ -519,6 +537,7 @@ button {
 }
 
 .profile-form input,
+.profile-form select,
 .search-input {
   width: 100%;
   border: 1px solid var(--border);
@@ -526,6 +545,10 @@ button {
   background: #121214;
   color: var(--text);
   padding: 12px 14px;
+}
+
+.profile-form select {
+  appearance: none;
 }
 
 .participant-card {
@@ -606,6 +629,30 @@ button {
   background: rgba(255, 122, 0, 0.1);
 }
 
+.overview-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.overview-card {
+  background: var(--panel-soft);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  display: grid;
+  gap: 6px;
+}
+
+.overview-card strong {
+  font-size: 28px;
+  line-height: 1;
+}
+
+.overview-card span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .bottom-bar {
   position: fixed;
   left: 8px;
@@ -681,7 +728,8 @@ button {
   .profile-grid,
   .profile-form,
   .event-expanded-grid,
-  .participant-list {
+  .participant-list,
+  .overview-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

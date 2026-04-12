@@ -8,67 +8,67 @@ type MorePageProps = {
 };
 
 export function MorePage({ partners, participants, auth }: MorePageProps) {
+  const communityPreview = participants.slice(0, 6);
+
   return (
     <div className="page-stack">
-      <SectionCard title="Партнёры VERUM" subtitle="Отдельный блок с подробной информацией о поддерживающих брендах">
+      <SectionCard title="Как пользоваться VERUM" subtitle="Коротко о том, что уже можно делать в приложении">
+        <ul className="flat-list">
+          <li>Следить за ближайшими событиями и быстро открывать нужную карточку.</li>
+          <li>Смотреть общий рейтинг сезона и искать участников по имени, городу или команде.</li>
+          <li>Обновлять свой профиль, подтверждать email и хранить историю выступлений в одном месте.</li>
+        </ul>
+      </SectionCard>
+
+      <SectionCard title="Партнёры VERUM" subtitle="Организации и бренды, которые поддерживают развитие платформы">
         <div className="list-grid">
-          {partners.map((partner) => (
-            <article key={partner.slug} className="partner-inline">
-              <div>
-                <strong>{partner.name}</strong>
-                <p>{partner.description}</p>
-              </div>
-              <a href={partner.website_url} target="_blank" rel="noreferrer">
-                Сайт
-              </a>
-            </article>
-          ))}
+          {partners.length ? (
+            partners.map((partner) => (
+              <article key={partner.slug} className="partner-inline">
+                <div>
+                  <strong>{partner.name}</strong>
+                  <p>{partner.description}</p>
+                </div>
+                <a href={partner.website_url} target="_blank" rel="noreferrer">
+                  Сайт
+                </a>
+              </article>
+            ))
+          ) : (
+            <div className="empty-state">Информация о партнёрах скоро появится.</div>
+          )}
         </div>
       </SectionCard>
 
-      <SectionCard title="Тренерский кабинет" subtitle="MVP-сценарий, который уже заложен в архитектуру">
-        <ul className="flat-list">
-          <li>Добавление учеников и сохранение их как черновиков</li>
-          <li>Регистрация учеников на мероприятия</li>
-          <li>Просмотр рейтинга и истории выступлений учеников</li>
-        </ul>
-      </SectionCard>
-
-      <SectionCard title="Кабинет организатора" subtitle="Доступен только после подтверждения админом">
-        <ul className="flat-list">
-          <li>Создание карточек мероприятий</li>
-          <li>Отправка событий на модерацию</li>
-          <li>Работа со статусами публикации</li>
-        </ul>
-      </SectionCard>
-
-      <SectionCard title="Админский контур" subtitle="Что видит и контролирует админ серии">
-        <ul className="flat-list">
-          <li>Регистрации участников и изменения профилей</li>
-          <li>Публикация новостей и модерация мероприятий</li>
-          <li>Импорт результатов и пересчёт рейтинга</li>
-          <li>Настройка коэффициентов и журнал действий</li>
-        </ul>
-      </SectionCard>
-
-      <SectionCard title="Участники платформы" subtitle="Список карточек, уже попавших в экосистему VERUM">
+      <SectionCard title="Сообщество" subtitle="Несколько участников, уже добавленных в экосистему VERUM">
         <div className="participant-list">
-          {participants.map((participant) => (
-            <article key={participant.verum_global_id} className="participant-card">
-              <img src={participant.photo_url} alt={participant.full_name} />
-              <div>
-                <strong>{participant.full_name}</strong>
-                <span>
-                  {participant.nickname} · {participant.city}
-                </span>
-                <span>
-                  {participant.team} · {participant.school_name}
-                </span>
-              </div>
-            </article>
-          ))}
+          {communityPreview.length ? (
+            communityPreview.map((participant) => (
+              <article key={participant.verum_global_id} className="participant-card">
+                <img src={participant.photo_url} alt={participant.full_name} />
+                <div>
+                  <strong>{participant.full_name}</strong>
+                  <span>
+                    {participant.nickname} · {participant.city}
+                  </span>
+                  <span>
+                    {participant.team} · {participant.school_name}
+                  </span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <div className="empty-state">Список участников появится после первых регистраций.</div>
+          )}
         </div>
-        {auth ? <div className="helper-text">Текущая роль аккаунта: {auth.role}</div> : null}
+      </SectionCard>
+
+      <SectionCard title="Помощь и доступ" subtitle="Что важно знать перед показом приложения участникам">
+        <ul className="flat-list">
+          <li>Если контент обновился, просто закрой Mini App и открой снова из чата бота.</li>
+          <li>Админ-доступ открывается отдельным кодом в чате бота и не мешает обычным участникам.</li>
+          <li>Текущая роль аккаунта: {auth?.role === "admin" ? "администратор" : "участник"}.</li>
+        </ul>
       </SectionCard>
     </div>
   );

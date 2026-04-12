@@ -11,6 +11,16 @@ type ProfilePageProps = {
   onAuthUpdated: (auth: AuthStatus) => void;
 };
 
+function computeAgeFromDate(birthDate: string) {
+  const nextBirth = new Date(birthDate);
+  const today = new Date();
+  let nextAge = today.getFullYear() - nextBirth.getFullYear();
+  if (today.getMonth() < nextBirth.getMonth() || (today.getMonth() === nextBirth.getMonth() && today.getDate() < nextBirth.getDate())) {
+    nextAge -= 1;
+  }
+  return nextAge;
+}
+
 export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUpdated }: ProfilePageProps) {
   const [status, setStatus] = useState("");
   const [verificationCode, setVerificationCode] = useState("");
@@ -40,20 +50,14 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
 
     try {
       await api.updateProfile(nextProfile);
-      const nextBirth = new Date(nextProfile.birth_date);
-      const today = new Date();
-      let nextAge = today.getFullYear() - nextBirth.getFullYear();
-      if (today.getMonth() < nextBirth.getMonth() || (today.getMonth() === nextBirth.getMonth() && today.getDate() < nextBirth.getDate())) {
-        nextAge -= 1;
-      }
       onProfileUpdated({
         ...profile,
         ...nextProfile,
         verum_global_id: profile.verum_global_id,
-        age: nextAge
+        age: computeAgeFromDate(nextProfile.birth_date)
       });
       onAuthUpdated({ ...auth, email: nextProfile.email });
-      setStatus("Профиль сохранён. Админ получит уведомление об изменениях.");
+      setStatus("Профиль сохранён. Обновлённые данные уже доступны в приложении.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Не удалось сохранить профиль.");
     }
@@ -63,7 +67,7 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
     try {
       const response = await api.sendEmailCode(auth.email);
       setDevCode(response.code ?? "");
-      setStatus(response.code ? `Код отправлен. Тестовый код: ${response.code}` : "Код отправлен на email.");
+      setStatus(response.code ? `Код отправлен. Тестовый код: ${response.code}` : "Код подтверждения отправлен на email.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Не удалось отправить код.");
     }
@@ -73,7 +77,7 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
     try {
       await api.verifyEmailCode(auth.email, verificationCode);
       onAuthUpdated({ ...auth, email_verified: true });
-      setStatus("Email успешно подтвержден.");
+      setStatus("Email успешно подтверждён.");
       setVerificationCode("");
       setDevCode("");
     } catch (error) {
@@ -96,33 +100,63 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
           <div className="hero-badges">
             <span className="status-pill open">VERUM ID {profile.verum_global_id}</span>
             <span className={`status-pill ${auth.email_verified ? "open" : ""}`}>
-              {auth.email_verified ? "Email подтвержден" : "Email не подтвержден"}
+              {auth.email_verified ? "Email подтверждён" : "Email не подтверждён"}
             </span>
           </div>
         </div>
       </section>
 
-      <SectionCard title="Публичная карточка" subtitle="Эти данные видят гости и другие участники">
+      <SectionCard title="Публичная карточка" subtitle="Эти данные видят организаторы и другие участники платформы">
         <div className="profile-grid">
-          <div><strong>Пол</strong><span>{profile.gender}</span></div>
-          <div><strong>Город</strong><span>{profile.city}</span></div>
-          <div><strong>Команда</strong><span>{profile.team}</span></div>
-          <div><strong>Тренер</strong><span>{profile.coach_name}</span></div>
-          <div><strong>Школа</strong><span>{profile.school_name}</span></div>
-          <div><strong>Никнейм</strong><span>{profile.nickname}</span></div>
+          <div>
+            <strong>Пол</strong>
+            <span>{profile.gender}</span>
+          </div>
+          <div>
+            <strong>Город</strong>
+            <span>{profile.city}</span>
+          </div>
+          <div>
+            <strong>Команда</strong>
+            <span>{profile.team}</span>
+          </div>
+          <div>
+            <strong>Тренер</strong>
+            <span>{profile.coach_name}</span>
+          </div>
+          <div>
+            <strong>Школа</strong>
+            <span>{profile.school_name}</span>
+          </div>
+          <div>
+            <strong>Никнейм</strong>
+            <span>{profile.nickname}</span>
+          </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Приватные данные" subtitle="Видны только участнику и админу">
+      <SectionCard title="Приватные данные" subtitle="Эти поля видишь только ты и администратор платформы">
         <div className="profile-grid">
-          <div><strong>Email</strong><span>{auth.email}</span></div>
-          <div><strong>Телефон</strong><span>{profile.phone}</span></div>
-          <div><strong>Telegram</strong><span>{auth.telegram_username || "Не указан"}</span></div>
-          <div><strong>Дата рождения</strong><span>{new Date(profile.birth_date).toLocaleDateString("ru-RU")}</span></div>
+          <div>
+            <strong>Email</strong>
+            <span>{auth.email}</span>
+          </div>
+          <div>
+            <strong>Телефон</strong>
+            <span>{profile.phone}</span>
+          </div>
+          <div>
+            <strong>Telegram</strong>
+            <span>{auth.telegram_username || "Не указан"}</span>
+          </div>
+          <div>
+            <strong>Дата рождения</strong>
+            <span>{new Date(profile.birth_date).toLocaleDateString("ru-RU")}</span>
+          </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Подтверждение email" subtitle="Код подтверждения и статус привязки аккаунта">
+      <SectionCard title="Подтверждение email" subtitle="Нужно для надёжной связи по заявкам и обновлениям профиля">
         {status ? <div className="status-banner">{status}</div> : null}
         <div className="verification-box">
           <button type="button" className="secondary-button" onClick={() => void handleSendCode()}>
@@ -139,11 +173,11 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
               Подтвердить
             </button>
           </div>
-          {devCode ? <div className="helper-text">Тестовый код для dev-режима: {devCode}</div> : null}
+          {devCode ? <div className="helper-text">Тестовый код для текущей сборки: {devCode}</div> : null}
         </div>
       </SectionCard>
 
-      <SectionCard title="История выступлений" subtitle="Какие мероприятия посетил и сколько баллов получил">
+      <SectionCard title="История выступлений" subtitle="События, результаты и полученные баллы в сезоне">
         <div className="results-list">
           {history.length ? (
             history.map((item, index) => (
@@ -166,7 +200,7 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
         </div>
       </SectionCard>
 
-      <SectionCard title="Редактирование профиля" subtitle="Изменения сохраняются сразу и уходят в журнал модерации">
+      <SectionCard title="Редактирование профиля" subtitle="Проверь, чтобы данные были точными: их используют для рейтинга и заявок">
         <form className="profile-form" onSubmit={(event) => void handleSubmit(event)}>
           <label>
             <span>Имя</span>
@@ -186,7 +220,11 @@ export function ProfilePage({ profile, auth, history, onProfileUpdated, onAuthUp
           </label>
           <label>
             <span>Пол</span>
-            <input name="gender" defaultValue={profile.gender} />
+            <select name="gender" defaultValue={profile.gender}>
+              <option value="male">Мужской</option>
+              <option value="female">Женский</option>
+              <option value="not_set">Не указан</option>
+            </select>
           </label>
           <label>
             <span>Город</span>
