@@ -1,10 +1,12 @@
 import asyncio
 import contextlib
 import logging
+from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandStart
-from aiogram.types import InlineKeyboardButton, Message, WebAppInfo
+from aiogram.types import InlineKeyboardButton, Message, Update, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.core.config import settings
@@ -12,6 +14,14 @@ from app.db.session import SessionLocal
 from app.models.entities import AuditLog, User
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BotRuntime:
+    bot: Bot
+    dispatcher: Dispatcher
+    mode: str
+    task: asyncio.Task[None] | None = None
 
 
 def build_fullscreen_miniapp_link(bot_username: str | None) -> str | None:
@@ -53,7 +63,7 @@ async def help_handler(message: Message) -> None:
     await message.answer(
         "Команды бота:\n"
         "/start — показать кнопку запуска\n"
-        "/app — снова открыть кнопку запуска\n"
+        "/app — снова показать кнопку запуска\n"
         "/admin — проверить, открыт ли админ-доступ\n\n"
         "Для стабильного fullscreen запускай приложение через кнопку из сообщения бота.",
         reply_markup=build_open_app_markup(me.username).as_markup(),
@@ -149,6 +159,17 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
+def resolve_webhook_url() -> str | None:
+    if not settings.telegram_webapp_url.startswith(("http://", "https://")):
+        return None
+
+    parts = urlsplit(settings.telegram_webapp_url)
+    if not parts.scheme or not parts.netloc:
+        return None
+
+    return f"{parts.scheme}://{parts.netloc}/telegram/webhook"
+
+
 async def run_bot() -> None:
     if not settings.telegram_bot_token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is required")
@@ -161,17 +182,27 @@ async def run_bot() -> None:
         await bot.session.close()
 
 
-async def start_bot_polling_task() -> tuple[Bot, asyncio.Task[None]] | None:
-    if not settings.enable_bot_polling or not settings.telegram_bot_token:
+async def start_bot_runtime() -> BotRuntime | None:
+    if not settings.telegram_bot_token:
+        logger.warning("Telegram bot token is missing, bot runtime will not start")
         return None
 
     bot = Bot(token=settings.telegram_bot_token)
-    dp = build_dispatcher()
+    dispatcher = build_dispatcher()
+    webhook_url = resolve_webhook_url()
+
+    if webhook_url:
+        try:
+            logger.info("Setting Telegram webhook to %s", webhook_url)
+            await bot.set_webhook(webhook_url, drop_pending_updates=False)
+            return BotRuntime(bot=bot, dispatcher=dispatcher, mode="webhook")
+        except Exception:
+            logger.exception("Failed to configure Telegram webhook, falling back to polling")
 
     async def polling_runner() -> None:
         logger.info("Starting Telegram bot polling")
         await bot.delete_webhook(drop_pending_updates=False)
-        await dp.start_polling(bot)
+        await dispatcher.start_polling(bot)
 
     task = asyncio.create_task(polling_runner())
 
@@ -182,18 +213,27 @@ async def start_bot_polling_task() -> tuple[Bot, asyncio.Task[None]] | None:
                 logger.exception("Telegram bot polling stopped with error", exc_info=error)
 
     task.add_done_callback(_log_task_result)
-    return bot, task
+    return BotRuntime(bot=bot, dispatcher=dispatcher, mode="polling", task=task)
 
 
-async def stop_bot_polling_task(runtime: tuple[Bot, asyncio.Task[None]] | None) -> None:
+async def feed_webhook_update(runtime: BotRuntime | None, update_data: dict) -> None:
+    if not runtime or runtime.mode != "webhook":
+        return
+
+    update = Update.model_validate(update_data, context={"bot": runtime.bot})
+    await runtime.dispatcher.feed_update(runtime.bot, update)
+
+
+async def stop_bot_runtime(runtime: BotRuntime | None) -> None:
     if not runtime:
         return
 
-    bot, task = runtime
-    task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await task
-    await bot.session.close()
+    if runtime.task:
+        runtime.task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await runtime.task
+
+    await runtime.bot.session.close()
 
 
 if __name__ == "__main__":

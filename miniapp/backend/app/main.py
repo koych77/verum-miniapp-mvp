@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
-from app.bot.main import start_bot_polling_task, stop_bot_polling_task
+from app.bot.main import feed_webhook_update, start_bot_runtime, stop_bot_runtime
 from app.core.config import settings
 from app.db.base import Base
 from app.db.session import SessionLocal, engine
@@ -26,9 +26,9 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         seed_database(db)
-    app.state.bot_runtime = await start_bot_polling_task()
+    app.state.bot_runtime = await start_bot_runtime()
     yield
-    await stop_bot_polling_task(app.state.bot_runtime)
+    await stop_bot_runtime(app.state.bot_runtime)
 
 
 app = FastAPI(title=settings.app_name, lifespan=lifespan)
@@ -76,3 +76,10 @@ def spa_fallback(full_path: str):
     if frontend_index.exists():
         return frontend_shell_response(frontend_index)
     raise HTTPException(status_code=404, detail="Frontend bundle not found")
+
+
+@app.post("/telegram/webhook", include_in_schema=False)
+async def telegram_webhook(request: Request):
+    payload = await request.json()
+    await feed_webhook_update(app.state.bot_runtime, payload)
+    return {"ok": True}
