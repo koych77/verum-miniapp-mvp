@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from app.models.entities import AuditLog, Event, EventDiscipline, EventResult, News, Partner, Participant, RatingSnapshot, User
+from app.models.entities import AuditLog, Event, EventDiscipline, EventRegistration, EventResult, News, Partner, Participant, RatingSnapshot, User
 
 
 def compute_age(birth_date: date) -> int:
