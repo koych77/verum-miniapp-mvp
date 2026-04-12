@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Layout } from "./components/Layout";
 import {
@@ -72,7 +72,13 @@ export default function App() {
     void boot();
   }, []);
 
-  const ticker = useMemo(() => partners.map((partner) => partner.name.toUpperCase()), [partners]);
+  const partnerLogos = partners
+    .filter((partner) => partner.logo_url)
+    .map((partner) => ({
+      name: partner.name,
+      logoUrl: partner.logo_url,
+      websiteUrl: partner.website_url
+    }));
 
   let content = <HomePage partners={partners} news={news} events={events} top10={top10} profile={profile} />;
   if (activeTab === "rating") content = <RatingPage ratings={ratings} />;
@@ -82,7 +88,7 @@ export default function App() {
   if (activeTab === "more") content = <MorePage partners={partners} participants={participants} auth={auth} />;
 
   return (
-    <Layout activeTab={activeTab} onTabChange={setActiveTab} ticker={ticker.length ? ticker : ["VERUM", "PARTNERS", "RATING", "EVENTS"]}>
+    <Layout activeTab={activeTab} onTabChange={setActiveTab} partnerLogos={partnerLogos}>
       {loading ? <div className="loading-screen">Загружаем VERUM Mini App...</div> : error ? <div className="error-banner">{error}</div> : content}
     </Layout>
   );

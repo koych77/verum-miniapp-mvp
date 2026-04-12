@@ -1,5 +1,7 @@
 :root {
   color-scheme: dark;
+  --header-height: 70px;
+  --ticker-height: 58px;
   --bg: #0e0d0f;
   --bg-strong: #181217;
   --panel: rgba(33, 20, 10, 0.78);
@@ -55,68 +57,72 @@ button {
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--header-height) + var(--ticker-height));
   padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
 }
 
 .top-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 6px;
-}
-
-.brand-mark {
-  width: 32px;
-  height: 32px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #fff 0%, #f5efe8 100%);
-  color: #21120a;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 32;
+  height: calc(env(safe-area-inset-top, 0px) + var(--header-height));
+  padding: env(safe-area-inset-top, 0px) 18px 10px;
   display: grid;
   place-items: center;
-  font-weight: 900;
-  font-size: 13px;
+  background: linear-gradient(180deg, rgba(78, 40, 6, 0.98), rgba(56, 27, 5, 0.96));
+  border-bottom: 1px solid rgba(255, 186, 102, 0.16);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.24);
 }
 
-.top-brand strong,
-.top-brand span {
-  display: block;
-}
-
-.top-brand strong {
-  font-size: 15px;
-  line-height: 1.1;
-}
-
-.top-brand span {
-  color: var(--muted);
-  font-size: 11px;
+.top-brand-logo {
+  width: min(240px, 66vw);
+  height: 28px;
+  object-fit: contain;
+  object-position: center;
 }
 
 .ticker-wrap {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + var(--header-height));
+  left: 0;
+  right: 0;
+  height: var(--ticker-height);
   overflow: hidden;
-  background: rgba(22, 15, 12, 0.92);
-  border-top: 1px solid var(--border);
+  background: rgba(15, 13, 15, 0.94);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(18px);
-  z-index: 20;
+  z-index: 31;
 }
 
 .ticker-track {
   display: flex;
   width: max-content;
   animation: ticker 24s linear infinite;
-  padding: 8px 0;
+  align-items: center;
+  height: 100%;
+  padding: 0 10px;
 }
 
-.ticker-item {
-  padding: 0 20px;
-  color: var(--orange-soft);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.26em;
-  white-space: nowrap;
+.ticker-logo-link {
+  flex: 0 0 auto;
+  width: 112px;
+  height: 34px;
+  margin: 0 8px;
+  padding: 6px 10px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 186, 102, 0.1);
+}
+
+.ticker-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center;
 }
 
 .page-content {
@@ -655,10 +661,6 @@ button {
 }
 
 @media (max-width: 420px) {
-  .top-brand span {
-    display: none;
-  }
-
   .hero-card h1,
   .profile-hero h1 {
     font-size: 24px;
@@ -666,5 +668,10 @@ button {
 
   .section-card {
     padding: 14px;
+  }
+
+  .ticker-logo-link {
+    width: 96px;
+    margin: 0 6px;
   }
 }

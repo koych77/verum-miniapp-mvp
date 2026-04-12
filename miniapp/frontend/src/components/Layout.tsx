@@ -2,38 +2,49 @@ import { ReactNode } from "react";
 
 type TabKey = "home" | "rating" | "events" | "profile" | "more";
 
+type PartnerLogo = {
+  name: string;
+  logoUrl: string;
+  websiteUrl: string;
+};
+
 type LayoutProps = {
   activeTab: TabKey;
   onTabChange: (tab: TabKey) => void;
-  ticker: string[];
+  partnerLogos: PartnerLogo[];
   children: ReactNode;
 };
 
 const tabs: { key: TabKey; label: string }[] = [
-  { key: "home", label: "Главная" },
-  { key: "rating", label: "Рейтинг" },
-  { key: "events", label: "События" },
-  { key: "profile", label: "Профиль" },
-  { key: "more", label: "Ещё" }
+  { key: "home", label: "Р“Р»Р°РІРЅР°СЏ" },
+  { key: "rating", label: "Р РµР№С‚РёРЅРі" },
+  { key: "events", label: "РЎРѕР±С‹С‚РёСЏ" },
+  { key: "profile", label: "РџСЂРѕС„РёР»СЊ" },
+  { key: "more", label: "Р•С‰С‘" }
 ];
 
-export function Layout({ activeTab, onTabChange, ticker, children }: LayoutProps) {
+export function Layout({ activeTab, onTabChange, partnerLogos, children }: LayoutProps) {
+  const tickerItems = partnerLogos.length ? [...partnerLogos, ...partnerLogos] : [];
+
   return (
     <div className="app-shell">
       <header className="top-brand">
-        <div className="brand-mark">V</div>
-        <div>
-          <strong>VERUM Connect</strong>
-          <span>Mini App платформы рейтинга</span>
-        </div>
+        <img className="top-brand-logo" src="/verum-logo-white.png" alt="VERUM" />
       </header>
 
-      <div className="ticker-wrap">
+      <div className="ticker-wrap" aria-label="РџР°СЂС‚РЅРµСЂС‹ VERUM">
         <div className="ticker-track">
-          {[...ticker, ...ticker].map((item, index) => (
-            <span key={`${item}-${index}`} className="ticker-item">
-              {item}
-            </span>
+          {tickerItems.map((partner, index) => (
+            <a
+              key={`${partner.name}-${index}`}
+              className="ticker-logo-link"
+              href={partner.websiteUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={partner.name}
+            >
+              <img className="ticker-logo" src={partner.logoUrl} alt={partner.name} />
+            </a>
           ))}
         </div>
       </div>
