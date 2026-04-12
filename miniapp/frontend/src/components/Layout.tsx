@@ -33,7 +33,7 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
         { name: "VERUM", logoUrl: "", websiteUrl: "#" }
       ];
   const tickerItems = [...baseTickerItems, ...baseTickerItems, ...baseTickerItems];
-  const logoSrc = `${import.meta.env.BASE_URL}verum-logo-white.png`;
+  const logoSrc = `${import.meta.env.BASE_URL}verum-wordmark.png`;
 
   return (
     <div className="app-shell">
