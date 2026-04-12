@@ -3,17 +3,35 @@ import contextlib
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart
-from aiogram.types import Message, WebAppInfo
+from aiogram.types import InlineKeyboardButton, Message, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.core.config import settings
 
 
+def build_fullscreen_miniapp_link(bot_username: str | None) -> str | None:
+    resolved_username = (settings.telegram_bot_username or bot_username or "").lstrip("@")
+    if not resolved_username:
+        return None
+
+    if settings.telegram_miniapp_short_name:
+        short_name = settings.telegram_miniapp_short_name.strip("/")
+        return f"https://t.me/{resolved_username}/{short_name}?mode=fullscreen"
+
+    return f"https://t.me/{resolved_username}?startapp=main&mode=fullscreen"
+
+
 async def start_handler(message: Message) -> None:
     kb = InlineKeyboardBuilder()
-    kb.button(text="Open VERUM Mini App", web_app=WebAppInfo(url=settings.telegram_webapp_url))
+    me = await message.bot.get_me()
+    fullscreen_link = build_fullscreen_miniapp_link(me.username)
+    if fullscreen_link:
+        kb.row(InlineKeyboardButton(text="Открыть VERUM Mini App", url=fullscreen_link))
+        kb.row(InlineKeyboardButton(text="Открыть встроенным режимом", web_app=WebAppInfo(url=settings.telegram_webapp_url)))
+    else:
+        kb.button(text="Открыть VERUM Mini App", web_app=WebAppInfo(url=settings.telegram_webapp_url))
     await message.answer(
-        "VERUM Mini App is ready. Open the app to view rankings, events, partners and your profile.",
+        "VERUM Mini App готов. Кнопка выше открывает полноэкранный режим Telegram Mini App.",
         reply_markup=kb.as_markup(),
     )
 

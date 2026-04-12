@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./verum_miniapp.db"
     jwt_secret: str = "change-me"
     telegram_bot_token: str = ""
+    telegram_bot_username: str = ""
     telegram_webapp_url: str = "http://localhost:5173"
+    telegram_miniapp_short_name: str = ""
     admin_email: str = "admin@verum.app"
     frontend_dist_dir: str = "/app/frontend_dist"
     enable_bot_polling: bool = True
