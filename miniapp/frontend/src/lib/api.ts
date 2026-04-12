@@ -1,7 +1,65 @@
 const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? `${window.location.origin.replace(/\/$/, "")}/api/v1`;
+const TOKEN_KEY = "verum-demo-token";
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = localStorage.getItem("verum-demo-token");
+let reauthPromise: Promise<string> | null = null;
+
+function getInitData() {
+  return window.Telegram?.WebApp?.initData || "demo";
+}
+
+function parseErrorMessage(raw: string, status: number) {
+  try {
+    const parsed = JSON.parse(raw) as { detail?: string };
+    if (parsed.detail === "Invalid token") {
+      return "Сессия обновляется. Попробуй ещё раз через секунду.";
+    }
+    return parsed.detail || raw || `HTTP ${status}`;
+  } catch {
+    return raw || `HTTP ${status}`;
+  }
+}
+
+async function createSessionToken() {
+  const response = await fetch(`${API_BASE}/auth/telegram/init`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ initData: getInitData() })
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(parseErrorMessage(text, response.status));
+  }
+
+  const data = (await response.json()) as { token: string };
+  localStorage.setItem(TOKEN_KEY, data.token);
+  return data.token;
+}
+
+async function ensureSession(force = false) {
+  const existing = localStorage.getItem(TOKEN_KEY);
+  if (existing && !force) {
+    return existing;
+  }
+
+  if (!reauthPromise) {
+    if (force) {
+      localStorage.removeItem(TOKEN_KEY);
+    }
+    window.Telegram?.WebApp?.ready?.();
+    window.Telegram?.WebApp?.expand?.();
+    reauthPromise = createSessionToken().finally(() => {
+      reauthPromise = null;
+    });
+  }
+
+  return reauthPromise;
+}
+
+async function request<T>(path: string, init?: RequestInit, retryOnAuth = true): Promise<T> {
+  const token = path === "/auth/telegram/init" ? null : await ensureSession();
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
@@ -11,9 +69,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     }
   });
 
+  if (response.status === 401 && retryOnAuth && path !== "/auth/telegram/init") {
+    await ensureSession(true);
+    return request<T>(path, init, false);
+  }
+
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(text || `HTTP ${response.status}`);
+    throw new Error(parseErrorMessage(text, response.status));
   }
 
   return response.json() as Promise<T>;
@@ -157,22 +220,7 @@ declare global {
 }
 
 export async function initAuth() {
-  const existing = localStorage.getItem("verum-demo-token");
-  if (existing) {
-    return existing;
-  }
-
-  const initData = window.Telegram?.WebApp?.initData || "demo";
-  window.Telegram?.WebApp?.ready?.();
-  window.Telegram?.WebApp?.expand?.();
-
-  const data = await request<{ token: string }>("/auth/telegram/init", {
-    method: "POST",
-    body: JSON.stringify({ initData })
-  });
-
-  localStorage.setItem("verum-demo-token", data.token);
-  return data.token;
+  return ensureSession();
 }
 
 export const api = {
