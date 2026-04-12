@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandStart
@@ -9,6 +10,8 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.core.config import settings
 from app.db.session import SessionLocal
 from app.models.entities import AuditLog, User
+
+logger = logging.getLogger(__name__)
 
 
 def build_fullscreen_miniapp_link(bot_username: str | None) -> str | None:
@@ -152,6 +155,7 @@ async def run_bot() -> None:
     bot = Bot(token=settings.telegram_bot_token)
     dp = build_dispatcher()
     try:
+        await bot.delete_webhook(drop_pending_updates=False)
         await dp.start_polling(bot)
     finally:
         await bot.session.close()
@@ -163,7 +167,21 @@ async def start_bot_polling_task() -> tuple[Bot, asyncio.Task[None]] | None:
 
     bot = Bot(token=settings.telegram_bot_token)
     dp = build_dispatcher()
-    task = asyncio.create_task(dp.start_polling(bot))
+
+    async def polling_runner() -> None:
+        logger.info("Starting Telegram bot polling")
+        await bot.delete_webhook(drop_pending_updates=False)
+        await dp.start_polling(bot)
+
+    task = asyncio.create_task(polling_runner())
+
+    def _log_task_result(done_task: asyncio.Task[None]) -> None:
+        with contextlib.suppress(asyncio.CancelledError):
+            error = done_task.exception()
+            if error:
+                logger.exception("Telegram bot polling stopped with error", exc_info=error)
+
+    task.add_done_callback(_log_task_result)
     return bot, task
 
 
