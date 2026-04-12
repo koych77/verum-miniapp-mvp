@@ -25,12 +25,13 @@ const tabs: { key: TabKey; label: string }[] = [
 
 export function Layout({ activeTab, onTabChange, partnerLogos, children }: LayoutProps) {
   const tickerItems = partnerLogos.length ? [...partnerLogos, ...partnerLogos] : [];
+  const logoSrc = `${import.meta.env.BASE_URL}verum-logo-white.png`;
 
   return (
     <div className="app-shell">
       <header className="top-brand">
         <div className="top-brand-logo-frame">
-          <img className="top-brand-logo" src="/verum-logo-white.png" alt="VERUM" />
+          <img className="top-brand-logo" src={logoSrc} alt="VERUM" />
         </div>
       </header>
 
