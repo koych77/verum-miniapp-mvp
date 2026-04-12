@@ -24,7 +24,7 @@ const tabs: { key: TabKey; label: string }[] = [
 ];
 
 export function Layout({ activeTab, onTabChange, partnerLogos, children }: LayoutProps) {
-  const tickerItems = partnerLogos.length
+  const baseTickerItems = partnerLogos.length
     ? partnerLogos
     : [
         { name: "VERUM", logoUrl: "", websiteUrl: "#" },
@@ -32,6 +32,7 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
         { name: "VERUM", logoUrl: "", websiteUrl: "#" },
         { name: "VERUM", logoUrl: "", websiteUrl: "#" }
       ];
+  const tickerItems = [...baseTickerItems, ...baseTickerItems, ...baseTickerItems];
   const logoSrc = `${import.meta.env.BASE_URL}verum-logo-white.png`;
 
   return (
