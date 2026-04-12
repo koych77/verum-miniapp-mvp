@@ -14,8 +14,8 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.entities import AuditLog, Event, EventRegistration, EventResult, News, Partner, Participant, RatingSnapshot, User
 from app.schemas.common import (
-    AdminActivityOut,
     AdminOverviewOut,
+    AdminRecentActivityOut,
     AdminRecentRegistrationOut,
     AdminStatsOut,
     AuthOut,
@@ -353,7 +353,7 @@ def admin_overview(db: Session = Depends(get_db), user: User = Depends(_require_
     actor_ids = {row.actor_user_id for row in audit_rows if row.actor_user_id}
     actors = {actor.id: actor for actor in db.query(User).filter(User.id.in_(actor_ids)).all()} if actor_ids else {}
     recent_activity = [
-        AdminActivityOut(
+        AdminRecentActivityOut(
             action=row.action,
             entity_type=row.entity_type,
             actor_label=_actor_label_for_activity(row.actor_user_id, actors),
