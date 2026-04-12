@@ -76,11 +76,20 @@ button {
   box-shadow: 0 10px 34px rgba(0, 0, 0, 0.24);
 }
 
+.top-brand-logo-frame {
+  width: min(360px, 88vw);
+  height: 44px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
 .top-brand-logo {
-  width: min(240px, 66vw);
-  height: 28px;
-  object-fit: contain;
+  width: min(460px, 112vw);
+  height: auto;
+  object-fit: cover;
   object-position: center;
+  transform: translateX(-1.5%);
 }
 
 .ticker-wrap {
@@ -661,6 +670,15 @@ button {
 }
 
 @media (max-width: 420px) {
+  .top-brand-logo-frame {
+    width: min(320px, 92vw);
+    height: 38px;
+  }
+
+  .top-brand-logo {
+    width: min(410px, 118vw);
+  }
+
   .hero-card h1,
   .profile-hero h1 {
     font-size: 24px;

@@ -29,7 +29,9 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
   return (
     <div className="app-shell">
       <header className="top-brand">
-        <img className="top-brand-logo" src="/verum-logo-white.png" alt="VERUM" />
+        <div className="top-brand-logo-frame">
+          <img className="top-brand-logo" src="/verum-logo-white.png" alt="VERUM" />
+        </div>
       </header>
 
       <div className="ticker-wrap" aria-label="РџР°СЂС‚РЅРµСЂС‹ VERUM">
