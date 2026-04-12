@@ -36,7 +36,23 @@ def build_open_app_markup(bot_username: str | None) -> InlineKeyboardBuilder:
 async def start_handler(message: Message) -> None:
     me = await message.bot.get_me()
     await message.answer(
-        "Открой VERUM Mini App по кнопке ниже. Приложение откроется в полноэкранном режиме Telegram.",
+        "Открой VERUM Mini App по кнопке ниже. Этот запуск ведёт в правильный fullscreen-сценарий Telegram.",
+        reply_markup=build_open_app_markup(me.username).as_markup(),
+    )
+
+
+async def app_handler(message: Message) -> None:
+    await start_handler(message)
+
+
+async def help_handler(message: Message) -> None:
+    me = await message.bot.get_me()
+    await message.answer(
+        "Команды бота:\n"
+        "/start — показать кнопку запуска\n"
+        "/app — снова открыть кнопку запуска\n"
+        "/admin — проверить, открыт ли админ-доступ\n\n"
+        "Для стабильного fullscreen запускай приложение через кнопку из сообщения бота.",
         reply_markup=build_open_app_markup(me.username).as_markup(),
     )
 
@@ -99,7 +115,7 @@ async def admin_status_handler(message: Message) -> None:
     me = await message.bot.get_me()
     if _is_admin_user(message):
         await message.answer(
-            "Для этого Telegram-аккаунта уже открыт админ-доступ. Открой Mini App заново, и вместо профиля появится вкладка администратора.",
+            "Для этого Telegram-аккаунта уже открыт админ-доступ. Закрой Mini App и открой заново: вместо профиля появится вкладка администратора.",
             reply_markup=build_open_app_markup(me.username).as_markup(),
         )
         return
@@ -115,7 +131,7 @@ async def admin_code_handler(message: Message) -> None:
 
     me = await message.bot.get_me()
     await message.answer(
-        "Код принят. Для этого Telegram-аккаунта открыт админ-доступ. Закрой Mini App и открой заново: вместо вкладки профиля появится админ-раздел.",
+        "Код принят. Для этого Telegram-аккаунта открыт админ-доступ. Закрой Mini App и открой заново: вместо профиля появится админ-раздел.",
         reply_markup=build_open_app_markup(me.username).as_markup(),
     )
 
@@ -123,6 +139,8 @@ async def admin_code_handler(message: Message) -> None:
 def build_dispatcher() -> Dispatcher:
     dp = Dispatcher()
     dp.message.register(start_handler, CommandStart())
+    dp.message.register(app_handler, Command("app"))
+    dp.message.register(help_handler, Command("help"))
     dp.message.register(admin_status_handler, Command("admin"))
     dp.message.register(admin_code_handler)
     return dp
