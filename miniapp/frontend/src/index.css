@@ -77,19 +77,19 @@ button {
 }
 
 .top-brand-logo-frame {
-  width: min(360px, 88vw);
-  height: 44px;
+  width: min(170px, 44vw);
+  height: 22px;
   overflow: hidden;
   display: grid;
   place-items: center;
 }
 
 .top-brand-logo {
-  width: min(460px, 112vw);
+  width: min(215px, 56vw);
   height: auto;
   object-fit: cover;
   object-position: center;
-  transform: translateX(-1.5%);
+  transform: translateX(-1%);
 }
 
 .ticker-wrap {
@@ -634,7 +634,9 @@ button {
   gap: 4px;
   padding: 8px 2px;
   border-radius: 14px;
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.1;
+  text-align: center;
 }
 
 .bottom-tab.active {
@@ -692,12 +694,12 @@ button {
 
 @media (max-width: 420px) {
   .top-brand-logo-frame {
-    width: min(320px, 92vw);
-    height: 38px;
+    width: min(150px, 42vw);
+    height: 18px;
   }
 
   .top-brand-logo {
-    width: min(410px, 118vw);
+    width: min(190px, 54vw);
   }
 
   .hero-card h1,

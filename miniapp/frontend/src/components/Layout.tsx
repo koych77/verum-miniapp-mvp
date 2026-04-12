@@ -16,11 +16,11 @@ type LayoutProps = {
 };
 
 const tabs: { key: TabKey; label: string }[] = [
-  { key: "home", label: "Р“Р»Р°РІРЅР°СЏ" },
-  { key: "rating", label: "Р РµР№С‚РёРЅРі" },
-  { key: "events", label: "РЎРѕР±С‹С‚РёСЏ" },
-  { key: "profile", label: "РџСЂРѕС„РёР»СЊ" },
-  { key: "more", label: "Р•С‰С‘" }
+  { key: "home", label: "\u0413\u043b\u0430\u0432\u043d\u0430\u044f" },
+  { key: "rating", label: "\u0420\u0435\u0439\u0442\u0438\u043d\u0433" },
+  { key: "events", label: "\u0421\u043e\u0431\u044b\u0442\u0438\u044f" },
+  { key: "profile", label: "\u041f\u0440\u043e\u0444\u0438\u043b\u044c" },
+  { key: "more", label: "\u0415\u0449\u0451" }
 ];
 
 export function Layout({ activeTab, onTabChange, partnerLogos, children }: LayoutProps) {
@@ -42,7 +42,7 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
         </div>
       </header>
 
-      <div className="ticker-wrap" aria-label="РџР°СЂС‚РЅРµСЂС‹ VERUM">
+      <div className="ticker-wrap" aria-label="\u041f\u0430\u0440\u0442\u043d\u0451\u0440\u044b VERUM">
         <div className="ticker-marquee">
           <div className="ticker-track">
             {tickerItems.map((partner, index) => (
