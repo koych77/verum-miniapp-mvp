@@ -27,11 +27,10 @@ async def start_handler(message: Message) -> None:
     fullscreen_link = build_fullscreen_miniapp_link(me.username)
     if fullscreen_link:
         kb.row(InlineKeyboardButton(text="Открыть VERUM Mini App", url=fullscreen_link))
-        kb.row(InlineKeyboardButton(text="Открыть встроенным режимом", web_app=WebAppInfo(url=settings.telegram_webapp_url)))
     else:
         kb.button(text="Открыть VERUM Mini App", web_app=WebAppInfo(url=settings.telegram_webapp_url))
     await message.answer(
-        "VERUM Mini App готов. Кнопка выше открывает полноэкранный режим Telegram Mini App.",
+        "VERUM Mini App должен открываться в fullscreen-режиме. Если Telegram показывает встроенное окно, значит в BotFather ещё не настроен Main/Direct Mini App fullscreen launch.",
         reply_markup=kb.as_markup(),
     )
 
