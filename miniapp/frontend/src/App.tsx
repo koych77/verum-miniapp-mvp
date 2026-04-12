@@ -72,6 +72,11 @@ export default function App() {
     void boot();
   }, []);
 
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    document.querySelector(".page-content")?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [activeTab]);
+
   const partnerLogos = partners
     .filter((partner) => partner.logo_url)
     .map((partner) => ({
