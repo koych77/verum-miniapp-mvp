@@ -2,7 +2,7 @@ import asyncio
 import contextlib
 
 from aiogram import Bot, Dispatcher
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import InlineKeyboardButton, Message, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
@@ -41,12 +41,25 @@ async def start_handler(message: Message) -> None:
     )
 
 
+def _normalized_admin_code(value: str) -> str:
+    return "".join(value.strip().split()).upper()
+
+
+def _is_admin_user(message: Message) -> bool:
+    if not message.from_user:
+        return False
+
+    with SessionLocal() as db:
+        user = db.query(User).filter(User.telegram_user_id == str(message.from_user.id)).first()
+        return bool(user and user.role == "admin")
+
+
 def _grant_admin_access(message: Message) -> bool:
     if not settings.admin_access_code:
         return False
     if not message.text or not message.from_user:
         return False
-    if message.text.strip() != settings.admin_access_code.strip():
+    if _normalized_admin_code(message.text) != _normalized_admin_code(settings.admin_access_code):
         return False
 
     telegram_user_id = str(message.from_user.id)
@@ -82,6 +95,18 @@ def _grant_admin_access(message: Message) -> bool:
     return True
 
 
+async def admin_status_handler(message: Message) -> None:
+    me = await message.bot.get_me()
+    if _is_admin_user(message):
+        await message.answer(
+            "Для этого Telegram-аккаунта уже открыт админ-доступ. Открой Mini App заново, и вместо профиля появится вкладка администратора.",
+            reply_markup=build_open_app_markup(me.username).as_markup(),
+        )
+        return
+
+    await message.answer("Админ-доступ пока не активирован. Отправь в этот чат секретный код доступа.")
+
+
 async def admin_code_handler(message: Message) -> None:
     if not message.text or message.text.startswith("/"):
         return
@@ -98,6 +123,7 @@ async def admin_code_handler(message: Message) -> None:
 def build_dispatcher() -> Dispatcher:
     dp = Dispatcher()
     dp.message.register(start_handler, CommandStart())
+    dp.message.register(admin_status_handler, Command("admin"))
     dp.message.register(admin_code_handler)
     return dp
 
