@@ -1,4 +1,4 @@
-import { ReactNode, useState } from "react";
+import { ReactNode } from "react";
 
 type TabKey = "home" | "rating" | "events" | "profile" | "more";
 
@@ -32,7 +32,10 @@ export function Layout({ activeTab, onTabChange, partnerLogos, children }: Layou
         { name: "VERUM", logoUrl: "", websiteUrl: "#" },
         { name: "VERUM", logoUrl: "", websiteUrl: "#" }
       ];
-  const tickerItems = [...baseTickerItems, ...baseTickerItems, ...baseTickerItems];
+  const tickerItems: PartnerLogo[] = [...baseTickerItems];
+  while (tickerItems.length < 10) {
+    tickerItems.push(...baseTickerItems);
+  }
   const logoSrc = `${import.meta.env.BASE_URL}verum-wordmark.png`;
 
   return (
@@ -82,14 +85,7 @@ type TickerCardProps = {
 };
 
 function TickerCard({ partner }: TickerCardProps) {
-  const [imageFailed, setImageFailed] = useState(false);
-  const showFallback = !partner.logoUrl || imageFailed;
-
-  const content = showFallback ? (
-    <span className="ticker-fallback">{partner.name || "VERUM"}</span>
-  ) : (
-    <img className="ticker-logo" src={partner.logoUrl} alt={partner.name} onError={() => setImageFailed(true)} />
-  );
+  const content = <span className="ticker-fallback">{partner.name || "VERUM"}</span>;
 
   if (!partner.websiteUrl || partner.websiteUrl === "#") {
     return <div className="ticker-logo-link ticker-logo-static">{content}</div>;

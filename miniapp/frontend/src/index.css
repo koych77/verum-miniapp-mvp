@@ -100,13 +100,15 @@ button {
   overflow: hidden;
   background: transparent;
   z-index: 31;
+  mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, black 8%, black 92%, transparent 100%);
 }
 
 .ticker-marquee {
   display: flex;
   width: max-content;
-  min-width: 100%;
-  animation: ticker 28s linear infinite;
+  animation: ticker 34s linear infinite;
+  will-change: transform;
 }
 
 .ticker-track {
@@ -114,44 +116,41 @@ button {
   flex: 0 0 auto;
   align-items: center;
   height: 100%;
-  gap: 22px;
-  padding: 0 11px;
+  gap: 14px;
+  padding: 0 7px;
 }
 
 .ticker-logo-link {
   flex: 0 0 auto;
   width: auto;
-  min-width: 78px;
+  min-width: 92px;
   height: 100%;
-  padding: 0 14px;
+  padding: 0 18px;
   display: grid;
   place-items: center;
   border-radius: 999px;
   background: transparent;
-  border: 1px solid rgba(255, 186, 102, 0.22);
-  box-shadow: none;
+  border: 1px solid rgba(255, 173, 76, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 0 0 1px rgba(255, 122, 0, 0.04);
+  text-decoration: none;
 }
 
 .ticker-logo-static {
   cursor: default;
 }
 
-.ticker-logo {
-  width: 100%;
-  max-width: 92px;
-  height: 26px;
-  object-fit: contain;
-  object-position: center;
-}
-
 .ticker-fallback {
-  color: var(--muted);
+  color: rgba(255, 184, 96, 0.96);
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.26em;
+  font-weight: 700;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   white-space: nowrap;
-  padding-left: 0.26em;
+  line-height: 1;
+  padding-left: 0.16em;
+  text-shadow: 0 0 18px rgba(255, 122, 0, 0.14);
 }
 
 .page-content {
@@ -711,20 +710,15 @@ button {
   }
 
   .ticker-logo-link {
-    min-width: 70px;
-    padding: 0 12px;
+    min-width: 84px;
+    padding: 0 14px;
   }
 
   .ticker-track {
-    gap: 18px;
+    gap: 12px;
   }
 
   .ticker-fallback {
     font-size: 11px;
-  }
-
-  .ticker-logo {
-    max-width: 80px;
-    height: 22px;
   }
 }
