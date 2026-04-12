@@ -309,7 +309,7 @@ export async function bootstrapMiniApp() {
 }
 
 export async function initAuth() {
-  return ensureSession();
+  return ensureSession(true);
 }
 
 export const api = {
