@@ -6,7 +6,7 @@ from urllib.parse import urlsplit
 
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command, CommandStart
-from aiogram.types import InlineKeyboardButton, Message, Update, WebAppInfo
+from aiogram.types import BotCommand, InlineKeyboardButton, MenuButtonCommands, Message, Update, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.core.config import settings
@@ -159,6 +159,21 @@ def build_dispatcher() -> Dispatcher:
     return dp
 
 
+async def configure_bot_shell(bot: Bot) -> None:
+    try:
+        await bot.set_my_commands(
+            [
+                BotCommand(command="start", description="Открыть VERUM"),
+                BotCommand(command="app", description="Показать кнопку запуска"),
+                BotCommand(command="help", description="Помощь"),
+                BotCommand(command="admin", description="Проверить админ-доступ"),
+            ]
+        )
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    except Exception:
+        logger.exception("Failed to configure Telegram commands/menu button")
+
+
 def resolve_webhook_url() -> str | None:
     if not settings.telegram_webapp_url.startswith(("http://", "https://")):
         return None
@@ -176,6 +191,7 @@ async def run_bot() -> None:
     bot = Bot(token=settings.telegram_bot_token)
     dp = build_dispatcher()
     try:
+        await configure_bot_shell(bot)
         await bot.delete_webhook(drop_pending_updates=False)
         await dp.start_polling(bot)
     finally:
@@ -190,6 +206,7 @@ async def start_bot_runtime() -> BotRuntime | None:
     bot = Bot(token=settings.telegram_bot_token)
     dispatcher = build_dispatcher()
     webhook_url = resolve_webhook_url()
+    await configure_bot_shell(bot)
 
     if webhook_url:
         try:
