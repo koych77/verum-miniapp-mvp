@@ -26,6 +26,8 @@ def compute_age(birth_date: date) -> int:
 
 
 def event_registration_open(event: Event) -> bool:
+    if event.status != "registration_open":
+        return False
     deadline = event.registration_deadline
     if deadline.tzinfo is None:
         deadline = deadline.replace(tzinfo=timezone.utc)

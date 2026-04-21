@@ -3,11 +3,14 @@ import { useEffect, useState } from "react";
 import { Layout } from "./components/Layout";
 import {
   AdminOverview,
+  AdminDirectory,
   api,
   AuthStatus,
+  CoachOverview,
   EventItem,
   initAuth,
   NewsItem,
+  OrganizerOverview,
   ParticipantHistoryItem,
   ParticipantProfile,
   ParticipantSummary,
@@ -15,9 +18,11 @@ import {
   RatingItem
 } from "./lib/api";
 import { AdminPage } from "./pages/AdminPage";
+import { CoachPage } from "./pages/CoachPage";
 import { EventsPage } from "./pages/EventsPage";
 import { HomePage } from "./pages/HomePage";
 import { MorePage } from "./pages/MorePage";
+import { OrganizerPage } from "./pages/OrganizerPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RatingPage } from "./pages/RatingPage";
 
@@ -35,8 +40,25 @@ export default function App() {
   const [history, setHistory] = useState<ParticipantHistoryItem[]>([]);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [adminOverview, setAdminOverview] = useState<AdminOverview | null>(null);
+  const [adminDirectory, setAdminDirectory] = useState<AdminDirectory | null>(null);
+  const [coachOverview, setCoachOverview] = useState<CoachOverview | null>(null);
+  const [organizerOverview, setOrganizerOverview] = useState<OrganizerOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  async function refreshRoleData(role = auth?.role) {
+    if (role === "admin") {
+      const [overview, directory] = await Promise.all([api.getAdminOverview(), api.getAdminDirectory()]);
+      setAdminOverview(overview);
+      setAdminDirectory(directory);
+    }
+    if (role === "coach") {
+      setCoachOverview(await api.getCoachOverview());
+    }
+    if (role === "organizer") {
+      setOrganizerOverview(await api.getOrganizerOverview());
+    }
+  }
 
   useEffect(() => {
     async function boot() {
@@ -65,15 +87,29 @@ export default function App() {
         setParticipants(participantRows);
 
         if (authRow.role === "admin") {
-          const overview = await api.getAdminOverview();
-          setAdminOverview(overview);
+          await refreshRoleData("admin");
           setProfile(null);
           setHistory([]);
+        } else if (authRow.role === "coach") {
+          await refreshRoleData("coach");
+          setProfile(null);
+          setHistory([]);
+          setAdminOverview(null);
+          setAdminDirectory(null);
+        } else if (authRow.role === "organizer") {
+          await refreshRoleData("organizer");
+          setProfile(null);
+          setHistory([]);
+          setAdminOverview(null);
+          setAdminDirectory(null);
         } else {
           const [profileRow, historyRows] = await Promise.all([api.getProfile(), api.getProfileHistory()]);
           setProfile(profileRow);
           setHistory(historyRows);
           setAdminOverview(null);
+          setAdminDirectory(null);
+          setCoachOverview(null);
+          setOrganizerOverview(null);
         }
       } catch (appError) {
         const message = appError instanceof Error ? appError.message : "Не удалось запустить VERUM Mini App.";
@@ -99,14 +135,28 @@ export default function App() {
 
   let content = <HomePage partners={partners} news={news} events={events} top10={top10} profile={profile} />;
   if (activeTab === "rating") content = <RatingPage ratings={ratings} />;
-  if (activeTab === "events") content = <EventsPage events={events} canSelfRegister={auth?.role !== "admin"} />;
+  if (activeTab === "events") content = <EventsPage events={events} canSelfRegister={auth?.role === "participant"} />;
   if (activeTab === "profile") {
-    content =
-      auth?.role === "admin" ? (
-        <AdminPage overview={adminOverview} events={events} />
-      ) : (
-        <ProfilePage profile={profile} auth={auth} history={history} onProfileUpdated={setProfile} onAuthUpdated={setAuth} />
+    if (auth?.role === "admin") {
+      content = (
+        <AdminPage
+          overview={adminOverview}
+          directory={adminDirectory}
+          onRoleChange={(userId, role) => {
+            void api.updateUserRole(userId, role).then(() => refreshRoleData("admin"));
+          }}
+          onEventStatusChange={(eventId, status) => {
+            void api.updateEventStatus(eventId, status).then(() => refreshRoleData("admin"));
+          }}
+        />
       );
+    } else if (auth?.role === "coach") {
+      content = <CoachPage overview={coachOverview} onRefresh={() => void refreshRoleData("coach")} />;
+    } else if (auth?.role === "organizer") {
+      content = <OrganizerPage overview={organizerOverview} onRefresh={() => void refreshRoleData("organizer")} />;
+    } else {
+      content = <ProfilePage profile={profile} auth={auth} history={history} onProfileUpdated={setProfile} onAuthUpdated={setAuth} />;
+    }
   }
   if (activeTab === "more") content = <MorePage partners={partners} participants={participants} auth={auth} />;
 
@@ -115,7 +165,7 @@ export default function App() {
       activeTab={activeTab}
       onTabChange={setActiveTab}
       partnerLogos={partnerTickerItems}
-      profileTabLabel={auth?.role === "admin" ? "Админ" : "Профиль"}
+      profileTabLabel={auth?.role === "admin" ? "Админ" : auth?.role === "coach" ? "Тренер" : auth?.role === "organizer" ? "Организатор" : "Профиль"}
     >
       {loading ? <div className="loading-screen">Загружаем VERUM Mini App...</div> : error ? <div className="error-banner">{error}</div> : content}
     </Layout>

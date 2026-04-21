@@ -350,6 +350,59 @@ export type AdminOverview = {
   recent_activity: AdminRecentActivity[];
 };
 
+export type AdminUser = {
+  id: string;
+  role: string;
+  email: string;
+  telegram_username?: string | null;
+  telegram_user_id?: string | null;
+  email_verified: boolean;
+  created_at: string;
+};
+
+export type AdminDirectory = {
+  users: AdminUser[];
+  participants: ParticipantSummary[];
+  events: EventItem[];
+};
+
+export type CoachOverview = {
+  coach_label: string;
+  students: ParticipantSummary[];
+  open_events: EventItem[];
+  recent_registrations: AdminRecentRegistration[];
+};
+
+export type CoachStudentCreate = {
+  first_name: string;
+  last_name: string;
+  nickname: string;
+  birth_date: string;
+  gender: string;
+  city: string;
+  team: string;
+  school_name: string;
+  phone: string;
+  photo_url?: string | null;
+};
+
+export type OrganizerOverview = {
+  organizer_label: string;
+  events: EventItem[];
+  total_registrations: number;
+};
+
+export type OrganizerEventCreate = {
+  title: string;
+  city: string;
+  venue_address: string;
+  start_at: string;
+  registration_deadline: string;
+  poster_url?: string | null;
+  description: string;
+  disciplines: EventDiscipline[];
+};
+
 declare global {
   interface Window {
     Telegram?: {
@@ -388,6 +441,34 @@ export const api = {
       body: JSON.stringify({ email, code })
     }),
   getAdminOverview: () => request<AdminOverview>("/admin/overview"),
+  getAdminDirectory: () => request<AdminDirectory>("/admin/directory"),
+  updateUserRole: (userId: string, role: string) =>
+    request<AdminUser>(`/admin/users/${userId}/role`, {
+      method: "PATCH",
+      body: JSON.stringify({ role })
+    }),
+  updateEventStatus: (eventId: string, status: string) =>
+    request<EventItem>(`/admin/events/${eventId}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    }),
+  getCoachOverview: () => request<CoachOverview>("/coach/overview"),
+  createCoachStudent: (payload: CoachStudentCreate) =>
+    request<ParticipantSummary>("/coach/students", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  coachRegisterStudent: (eventId: string, verumGlobalId: string, disciplineTitle: string) =>
+    request<{ ok: boolean; status: string }>(`/coach/events/${eventId}/students/${verumGlobalId}/register`, {
+      method: "POST",
+      body: JSON.stringify({ discipline_title: disciplineTitle })
+    }),
+  getOrganizerOverview: () => request<OrganizerOverview>("/organizer/overview"),
+  createOrganizerEvent: (payload: OrganizerEventCreate) =>
+    request<EventItem>("/organizer/events", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   getPartners: () => request<Partner[]>("/partners"),
   getPartnerTicker: () => request<Partner[]>("/partners/ticker"),
   getNews: () => request<NewsItem[]>("/news"),

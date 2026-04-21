@@ -12,14 +12,18 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.entities import AuditLog, Event, EventRegistration, EventResult, News, Partner, Participant, RatingSnapshot, User
+from app.models.entities import AuditLog, Event, EventDiscipline, EventRegistration, EventResult, News, Partner, Participant, RatingSnapshot, User
 from app.schemas.common import (
     AdminOverviewOut,
+    AdminDirectoryOut,
     AdminRecentActivityOut,
     AdminRecentRegistrationOut,
     AdminStatsOut,
     AuthOut,
     AuthStatusOut,
+    CoachOverviewOut,
+    CoachStudentCreateIn,
+    EventStatusUpdateIn,
     DisciplineOut,
     EmailSendIn,
     EmailVerifyIn,
@@ -34,7 +38,11 @@ from app.schemas.common import (
     PartnerOut,
     RatingItemOut,
     RegisterEventIn,
+    RoleUpdateIn,
     TelegramInitIn,
+    OrganizerEventCreateIn,
+    OrganizerOverviewOut,
+    UserAdminOut,
 )
 from app.services.bootstrap import compute_age, event_registration_open
 
@@ -260,6 +268,59 @@ def _require_admin(user: User = Depends(_current_user)) -> User:
     return user
 
 
+def _require_coach(user: User = Depends(_current_user)) -> User:
+    if user.role != "coach":
+        raise HTTPException(status_code=403, detail="Этот раздел доступен только тренеру.")
+    return user
+
+
+def _require_organizer(user: User = Depends(_current_user)) -> User:
+    if user.role != "organizer":
+        raise HTTPException(status_code=403, detail="Этот раздел доступен только организатору.")
+    return user
+
+
+def _user_admin_out(user: User) -> UserAdminOut:
+    return UserAdminOut(
+        id=user.id,
+        role=user.role,
+        email=user.email,
+        telegram_username=user.telegram_username,
+        telegram_user_id=user.telegram_user_id,
+        email_verified=user.email_verified,
+        created_at=user.created_at,
+    )
+
+
+def _identity_labels(user: User) -> set[str]:
+    labels = {user.email.split("@")[0], user.email}
+    if user.telegram_username:
+        labels.add(user.telegram_username)
+        labels.add(f"@{user.telegram_username}")
+    return {label.strip().casefold() for label in labels if label and label.strip()}
+
+
+def _coach_students(user: User, db: Session) -> list[Participant]:
+    labels = _identity_labels(user)
+    return [participant for participant in db.query(Participant).order_by(Participant.first_name.asc(), Participant.last_name.asc()).all() if participant.coach_name.casefold() in labels]
+
+
+def _organizer_events(user: User, db: Session) -> list[Event]:
+    labels = _identity_labels(user)
+    return [event for event in db.query(Event).options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results)).order_by(Event.start_at.asc()).all() if event.organizer_name.casefold() in labels]
+
+
+def _registration_out(registration: EventRegistration, participant: Participant, event: Event) -> AdminRecentRegistrationOut:
+    return AdminRecentRegistrationOut(
+        participant_name=f"{participant.first_name} {participant.last_name}",
+        participant_verum_global_id=participant.verum_global_id,
+        event_title=event.title,
+        discipline_title=registration.discipline_title,
+        source=registration.source,
+        created_at=registration.created_at,
+    )
+
+
 def _actor_label_for_activity(actor_user_id: str | None, actors: dict[str, User]) -> str:
     if not actor_user_id or actor_user_id not in actors:
         return "Система"
@@ -363,17 +424,7 @@ def admin_overview(db: Session = Depends(get_db), user: User = Depends(_require_
         .limit(8)
         .all()
     )
-    recent_registrations = [
-        AdminRecentRegistrationOut(
-            participant_name=f"{participant.first_name} {participant.last_name}",
-            participant_verum_global_id=participant.verum_global_id,
-            event_title=event.title,
-            discipline_title=registration.discipline_title,
-            source=registration.source,
-            created_at=registration.created_at,
-        )
-        for registration, participant, event in registrations
-    ]
+    recent_registrations = [_registration_out(registration, participant, event) for registration, participant, event in registrations]
 
     audit_rows = db.query(AuditLog).order_by(AuditLog.created_at.desc()).limit(8).all()
     actor_ids = {row.actor_user_id for row in audit_rows if row.actor_user_id}
@@ -390,6 +441,92 @@ def admin_overview(db: Session = Depends(get_db), user: User = Depends(_require_
     ]
 
     return AdminOverviewOut(stats=stats, recent_registrations=recent_registrations, recent_activity=recent_activity)
+
+
+@router.get("/admin/directory", response_model=AdminDirectoryOut)
+def admin_directory(db: Session = Depends(get_db), user: User = Depends(_require_admin)):
+    del user
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    participants_rows = db.query(Participant).order_by(Participant.created_at.desc()).all()
+    event_rows = (
+        db.query(Event)
+        .options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results))
+        .order_by(Event.start_at.desc())
+        .all()
+    )
+    return AdminDirectoryOut(
+        users=[_user_admin_out(row) for row in users],
+        participants=[_participant_summary(row) for row in participants_rows],
+        events=[_event_out(row) for row in event_rows],
+    )
+
+
+@router.patch("/admin/users/{user_id}/role", response_model=UserAdminOut)
+def admin_update_user_role(user_id: str, payload: RoleUpdateIn, db: Session = Depends(get_db), admin: User = Depends(_require_admin)):
+    allowed_roles = {"participant", "coach", "organizer", "admin"}
+    if payload.role not in allowed_roles:
+        raise HTTPException(status_code=400, detail="Неизвестная роль пользователя.")
+    target = db.get(User, user_id)
+    if not target:
+        raise HTTPException(status_code=404, detail="Пользователь не найден.")
+
+    target.role = payload.role
+    if payload.role in {"coach", "organizer", "admin"}:
+        target.email_verified = True
+    if payload.role == "participant" and not db.query(Participant).filter(Participant.user_id == target.id).first():
+        db.add(
+            Participant(
+                verum_global_id=_next_verum_id(db),
+                user_id=target.id,
+                first_name="Новый",
+                last_name="участник",
+                nickname=target.telegram_username or target.email.split("@")[0],
+                birth_date=date(2012, 1, 1),
+                gender="not_set",
+                city="Не указан",
+                team="Не указана",
+                coach_name="Не указан",
+                school_name="Не указана",
+                phone="Не указан",
+                photo_url="https://dummyimage.com/600x800/111111/ff7a00&text=VERUM+ATHLETE",
+            )
+        )
+    db.add(
+        AuditLog(
+            actor_user_id=admin.id,
+            entity_type="user",
+            entity_id=target.id,
+            action="role_updated",
+            payload=_json_payload({"role": payload.role}),
+        )
+    )
+    db.commit()
+    db.refresh(target)
+    return _user_admin_out(target)
+
+
+@router.patch("/admin/events/{event_id}/status", response_model=EventOut)
+def admin_update_event_status(event_id: str, payload: EventStatusUpdateIn, db: Session = Depends(get_db), admin: User = Depends(_require_admin)):
+    allowed_statuses = {"draft", "registration_open", "published", "completed", "cancelled"}
+    if payload.status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="Неизвестный статус события.")
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено.")
+
+    event.status = payload.status
+    db.add(
+        AuditLog(
+            actor_user_id=admin.id,
+            entity_type="event",
+            entity_id=event.id,
+            action="status_updated",
+            payload=_json_payload({"status": payload.status}),
+        )
+    )
+    db.commit()
+    db.refresh(event)
+    return _event_out(event)
 
 
 @router.get("/partners/ticker", response_model=list[PartnerOut])
@@ -423,6 +560,7 @@ def events(db: Session = Depends(get_db)):
     rows = (
         db.query(Event)
         .options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results))
+        .filter(Event.status.in_(["registration_open", "published", "completed"]))
         .order_by(Event.start_at.asc())
         .all()
     )
@@ -435,6 +573,7 @@ def event_by_slug(slug: str, db: Session = Depends(get_db)):
         db.query(Event)
         .options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results))
         .filter(Event.slug == slug)
+        .filter(Event.status.in_(["registration_open", "published", "completed"]))
         .first()
     )
     if not row:
@@ -444,7 +583,7 @@ def event_by_slug(slug: str, db: Session = Depends(get_db)):
 
 @router.get("/events/{slug}/results", response_model=list[EventResultOut])
 def event_results(slug: str, db: Session = Depends(get_db)):
-    event = db.query(Event).filter(Event.slug == slug).first()
+    event = db.query(Event).filter(Event.slug == slug, Event.status.in_(["registration_open", "published", "completed"])).first()
     if not event:
         raise HTTPException(status_code=404, detail="Событие не найдено.")
 
@@ -513,6 +652,180 @@ def register_self(event_id: str, payload: RegisterEventIn, db: Session = Depends
     )
     db.commit()
     return {"ok": True, "status": "registered"}
+
+
+@router.get("/coach/overview", response_model=CoachOverviewOut)
+def coach_overview(db: Session = Depends(get_db), user: User = Depends(_require_coach)):
+    students = _coach_students(user, db)
+    student_ids = [student.id for student in students]
+    open_events = (
+        db.query(Event)
+        .options(joinedload(Event.disciplines), joinedload(Event.registrations), joinedload(Event.results))
+        .filter(Event.status == "registration_open")
+        .order_by(Event.start_at.asc())
+        .all()
+    )
+    registrations = []
+    if student_ids:
+        registrations = (
+            db.query(EventRegistration, Participant, Event)
+            .join(Participant, Participant.id == EventRegistration.participant_id)
+            .join(Event, Event.id == EventRegistration.event_id)
+            .filter(EventRegistration.participant_id.in_(student_ids))
+            .order_by(EventRegistration.created_at.desc())
+            .limit(12)
+            .all()
+        )
+
+    return CoachOverviewOut(
+        coach_label=user.telegram_username or user.email,
+        students=[_participant_summary(student) for student in students],
+        open_events=[_event_out(event) for event in open_events],
+        recent_registrations=[_registration_out(registration, participant, event) for registration, participant, event in registrations],
+    )
+
+
+@router.post("/coach/students", response_model=ParticipantSummaryOut)
+def coach_create_student(payload: CoachStudentCreateIn, db: Session = Depends(get_db), user: User = Depends(_require_coach)):
+    coach_name = user.telegram_username or user.email.split("@")[0]
+    participant = Participant(
+        verum_global_id=_next_verum_id(db),
+        first_name=payload.first_name,
+        last_name=payload.last_name,
+        nickname=payload.nickname,
+        birth_date=payload.birth_date,
+        gender=payload.gender,
+        city=payload.city,
+        team=payload.team,
+        coach_name=coach_name,
+        school_name=payload.school_name,
+        phone=payload.phone,
+        photo_url=payload.photo_url or "https://dummyimage.com/600x800/111111/ff7a00&text=VERUM+ATHLETE",
+    )
+    db.add(participant)
+    db.flush()
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="participant",
+            entity_id=participant.id,
+            action="coach_student_created",
+            payload=_json_payload({"verum_global_id": participant.verum_global_id}),
+        )
+    )
+    db.commit()
+    db.refresh(participant)
+    return _participant_summary(participant)
+
+
+@router.post("/coach/events/{event_id}/students/{verum_global_id}/register")
+def coach_register_student(
+    event_id: str,
+    verum_global_id: str,
+    payload: RegisterEventIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_coach),
+):
+    student = db.query(Participant).filter(Participant.verum_global_id == verum_global_id).first()
+    if not student or student.id not in {row.id for row in _coach_students(user, db)}:
+        raise HTTPException(status_code=404, detail="Ученик не найден в списке этого тренера.")
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Событие не найдено.")
+    if not event_registration_open(event):
+        raise HTTPException(status_code=400, detail="Регистрация на это событие закрыта.")
+
+    existing = (
+        db.query(EventRegistration)
+        .filter(
+            EventRegistration.event_id == event.id,
+            EventRegistration.participant_id == student.id,
+            EventRegistration.discipline_title == payload.discipline_title,
+        )
+        .first()
+    )
+    if existing:
+        return {"ok": True, "status": "already_registered"}
+
+    registration = EventRegistration(
+        event_id=event.id,
+        participant_id=student.id,
+        discipline_title=payload.discipline_title,
+        source="coach",
+    )
+    db.add(registration)
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="event_registration",
+            action="coach_register_student",
+            payload=_json_payload({"event_id": event.id, "verum_global_id": student.verum_global_id, "discipline_title": payload.discipline_title}),
+        )
+    )
+    db.commit()
+    return {"ok": True, "status": "registered"}
+
+
+@router.get("/organizer/overview", response_model=OrganizerOverviewOut)
+def organizer_overview(db: Session = Depends(get_db), user: User = Depends(_require_organizer)):
+    events_rows = _organizer_events(user, db)
+    event_ids = [event.id for event in events_rows]
+    registrations_count = db.query(EventRegistration).filter(EventRegistration.event_id.in_(event_ids)).count() if event_ids else 0
+    return OrganizerOverviewOut(
+        organizer_label=user.telegram_username or user.email,
+        events=[_event_out(event) for event in events_rows],
+        total_registrations=registrations_count,
+    )
+
+
+@router.post("/organizer/events", response_model=EventOut)
+def organizer_create_event(payload: OrganizerEventCreateIn, db: Session = Depends(get_db), user: User = Depends(_require_organizer)):
+    if not payload.disciplines:
+        raise HTTPException(status_code=400, detail="Добавь хотя бы одну дисциплину.")
+
+    base_slug = "".join(character.lower() if character.isalnum() else "-" for character in payload.title.strip()).strip("-") or "event"
+    slug = base_slug
+    suffix = 2
+    while db.query(Event).filter(Event.slug == slug).first():
+        slug = f"{base_slug}-{suffix}"
+        suffix += 1
+
+    event = Event(
+        slug=slug,
+        title=payload.title,
+        city=payload.city,
+        venue_address=payload.venue_address,
+        start_at=payload.start_at,
+        registration_deadline=payload.registration_deadline,
+        poster_url=payload.poster_url,
+        description=payload.description,
+        status="draft",
+        organizer_name=user.telegram_username or user.email.split("@")[0],
+    )
+    db.add(event)
+    db.flush()
+    for index, discipline in enumerate(payload.disciplines, start=1):
+        db.add(
+            EventDiscipline(
+                event_id=event.id,
+                title=discipline.title,
+                format=discipline.format,
+                nomination_label=discipline.nomination_label,
+                sort_order=index,
+            )
+        )
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="event",
+            entity_id=event.id,
+            action="organizer_event_created",
+            payload=_json_payload({"slug": event.slug, "status": event.status}),
+        )
+    )
+    db.commit()
+    db.refresh(event)
+    return _event_out(event)
 
 
 @router.get("/ratings/global/top10", response_model=list[RatingItemOut])

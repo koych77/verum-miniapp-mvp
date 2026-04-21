@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr
@@ -23,6 +25,12 @@ class NewsOut(BaseModel):
 class DisciplineOut(BaseModel):
     title: str
     format: str
+    nomination_label: str
+
+
+class DisciplineIn(BaseModel):
+    title: str
+    format: str = "1v1"
     nomination_label: str
 
 
@@ -139,6 +147,67 @@ class TelegramInitIn(BaseModel):
 
 class RegisterEventIn(BaseModel):
     discipline_title: str
+
+
+class CoachStudentCreateIn(BaseModel):
+    first_name: str
+    last_name: str
+    nickname: str
+    birth_date: date
+    gender: str
+    city: str
+    team: str
+    school_name: str
+    phone: str
+    photo_url: str | None = None
+
+
+class CoachOverviewOut(BaseModel):
+    coach_label: str
+    students: list[ParticipantSummaryOut]
+    open_events: list[EventOut]
+    recent_registrations: list[AdminRecentRegistrationOut]
+
+
+class OrganizerEventCreateIn(BaseModel):
+    title: str
+    city: str
+    venue_address: str
+    start_at: datetime
+    registration_deadline: datetime
+    poster_url: str | None = None
+    description: str
+    disciplines: list[DisciplineIn]
+
+
+class OrganizerOverviewOut(BaseModel):
+    organizer_label: str
+    events: list[EventOut]
+    total_registrations: int
+
+
+class UserAdminOut(BaseModel):
+    id: str
+    role: str
+    email: EmailStr
+    telegram_username: str | None = None
+    telegram_user_id: str | None = None
+    email_verified: bool
+    created_at: datetime
+
+
+class AdminDirectoryOut(BaseModel):
+    users: list[UserAdminOut]
+    participants: list[ParticipantSummaryOut]
+    events: list[EventOut]
+
+
+class RoleUpdateIn(BaseModel):
+    role: str
+
+
+class EventStatusUpdateIn(BaseModel):
+    status: str
 
 
 class AuthOut(BaseModel):

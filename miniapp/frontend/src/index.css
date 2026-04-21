@@ -47,7 +47,9 @@ img {
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
 }
 
@@ -538,6 +540,8 @@ button {
 
 .profile-form input,
 .profile-form select,
+.profile-form textarea,
+.result-meta select,
 .search-input {
   width: 100%;
   border: 1px solid var(--border);
@@ -547,8 +551,25 @@ button {
   padding: 12px 14px;
 }
 
-.profile-form select {
+.profile-form select,
+.result-meta select {
   appearance: none;
+}
+
+.profile-form textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.inline-action {
+  margin-top: 10px;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+
+.admin-row {
+  grid-template-columns: 1fr minmax(130px, 180px);
 }
 
 .participant-card {
