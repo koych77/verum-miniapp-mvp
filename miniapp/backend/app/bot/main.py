@@ -91,12 +91,14 @@ def _is_admin_user(message: Message) -> bool:
         return bool(user and user.role == "admin")
 
 
-def _grant_admin_access(message: Message) -> bool:
+def _grant_admin_access(message: Message, code_text: str | None = None) -> bool:
     if not settings.admin_access_code:
         return False
     if not message.text or not message.from_user:
         return False
-    if _normalized_admin_code(message.text) != _normalized_admin_code(settings.admin_access_code):
+    candidate = code_text if code_text is not None else message.text
+    if _normalized_admin_code(candidate) != _normalized_admin_code(settings.admin_access_code):
+        logger.info("Rejected admin code attempt from telegram_user_id=%s", message.from_user.id)
         return False
 
     telegram_user_id = str(message.from_user.id)
@@ -129,11 +131,33 @@ def _grant_admin_access(message: Message) -> bool:
         )
         db.commit()
 
+    logger.info("Granted admin access to telegram_user_id=%s username=%s", telegram_user_id, telegram_username)
     return True
+
+
+def _admin_success_text() -> str:
+    return (
+        "Код принят. Для этого Telegram-аккаунта открыт админ-доступ.\n\n"
+        "Теперь полностью закрой Mini App и открой заново через кнопку ниже. "
+        "Во вкладке снизу вместо «Профиль» появится «Админ»."
+    )
 
 
 async def admin_status_handler(message: Message) -> None:
     me = await message.bot.get_me()
+    command_parts = (message.text or "").split(maxsplit=1)
+    if len(command_parts) > 1:
+        code_text = command_parts[1]
+        if _grant_admin_access(message, code_text):
+            await message.answer(
+                _admin_success_text(),
+                reply_markup=build_open_app_markup(me.username).as_markup(),
+            )
+            return
+
+        await message.answer("Код не подошёл. Отправь так: /admin VERUM2026ADMIN")
+        return
+
     if _is_admin_user(message):
         await message.answer(
             "Для этого Telegram-аккаунта уже открыт админ-доступ. Закрой Mini App и открой заново: вместо профиля появится вкладка администратора.",
@@ -160,7 +184,7 @@ async def admin_code_handler(message: Message) -> None:
 
     me = await message.bot.get_me()
     await message.answer(
-        "Код принят. Для этого Telegram-аккаунта открыт админ-доступ. Закрой Mini App и открой заново: вместо профиля появится админ-раздел.",
+        _admin_success_text(),
         reply_markup=build_open_app_markup(me.username).as_markup(),
     )
 
