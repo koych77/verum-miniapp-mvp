@@ -82,13 +82,31 @@ def _looks_like_admin_code_attempt(value: str) -> bool:
     return "ADMIN" in normalized or "VERUM" in normalized
 
 
-def _is_admin_user(message: Message) -> bool:
-    if not message.from_user:
-        return False
+def _telegram_user_id(message: Message) -> str | None:
+    return str(message.from_user.id) if message.from_user else None
+
+
+def _user_for_message(message: Message) -> User | None:
+    telegram_user_id = _telegram_user_id(message)
+    if not telegram_user_id:
+        return None
 
     with SessionLocal() as db:
-        user = db.query(User).filter(User.telegram_user_id == str(message.from_user.id)).first()
-        return bool(user and user.role == "admin")
+        return db.query(User).filter(User.telegram_user_id == telegram_user_id).first()
+
+
+def _admin_state_text(message: Message, prefix: str) -> str:
+    telegram_user_id = _telegram_user_id(message) or "не определён"
+    user = _user_for_message(message)
+    role = user.role if user else "нет пользователя в базе"
+    raw_username = user.telegram_username if user else message.from_user.username if message.from_user else None
+    username = f"@{raw_username}" if raw_username else "не указан"
+    return f"{prefix}\nTelegram ID: {telegram_user_id}\nUsername: {username}\nРоль в базе: {role}"
+
+
+def _is_admin_user(message: Message) -> bool:
+    user = _user_for_message(message)
+    return bool(user and user.role == "admin")
 
 
 def _grant_admin_access(message: Message, code_text: str | None = None) -> bool:
@@ -150,22 +168,26 @@ async def admin_status_handler(message: Message) -> None:
         code_text = command_parts[1]
         if _grant_admin_access(message, code_text):
             await message.answer(
-                _admin_success_text(),
+                f"{_admin_success_text()}\n\n{_admin_state_text(message, 'Проверка после кода:')}",
                 reply_markup=build_open_app_markup(me.username).as_markup(),
             )
             return
 
-        await message.answer("Код не подошёл. Отправь так: /admin VERUM2026ADMIN")
+        await message.answer(
+            f"Код не подошёл. Отправь так: /admin VERUM2026ADMIN\n\n{_admin_state_text(message, 'Проверка аккаунта:')}"
+        )
         return
 
     if _is_admin_user(message):
         await message.answer(
-            "Для этого Telegram-аккаунта уже открыт админ-доступ. Закрой Mini App и открой заново: вместо профиля появится вкладка администратора.",
+            f"Для этого Telegram-аккаунта уже открыт админ-доступ.\n\n{_admin_state_text(message, 'Проверка аккаунта:')}\n\nЗакрой Mini App и открой заново: вместо профиля появится вкладка администратора.",
             reply_markup=build_open_app_markup(me.username).as_markup(),
         )
         return
 
-    await message.answer("Админ-доступ пока не активирован. Отправь в этот чат секретный код доступа.")
+    await message.answer(
+        f"Админ-доступ пока не активирован.\n\n{_admin_state_text(message, 'Проверка аккаунта:')}\n\nОтправь в этот чат команду:\n/admin VERUM2026ADMIN"
+    )
 
 
 async def admin_code_handler(message: Message) -> None:
@@ -184,7 +206,7 @@ async def admin_code_handler(message: Message) -> None:
 
     me = await message.bot.get_me()
     await message.answer(
-        _admin_success_text(),
+        f"{_admin_success_text()}\n\n{_admin_state_text(message, 'Проверка после кода:')}",
         reply_markup=build_open_app_markup(me.username).as_markup(),
     )
 
