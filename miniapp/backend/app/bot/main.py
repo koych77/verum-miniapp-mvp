@@ -71,7 +71,15 @@ async def help_handler(message: Message) -> None:
 
 
 def _normalized_admin_code(value: str) -> str:
-    return "".join(value.strip().split()).upper()
+    return "".join(character for character in value.strip().upper() if character.isalnum())
+
+
+def _looks_like_admin_code_attempt(value: str) -> bool:
+    normalized = _normalized_admin_code(value)
+    expected = _normalized_admin_code(settings.admin_access_code or "")
+    if expected and normalized == expected:
+        return True
+    return "ADMIN" in normalized or "VERUM" in normalized
 
 
 def _is_admin_user(message: Message) -> bool:
@@ -139,7 +147,15 @@ async def admin_status_handler(message: Message) -> None:
 async def admin_code_handler(message: Message) -> None:
     if not message.text or message.text.startswith("/"):
         return
+
+    if not settings.admin_access_code:
+        if _looks_like_admin_code_attempt(message.text):
+            await message.answer("Админ-код на сервере пока не настроен. Проверь переменную ADMIN_ACCESS_CODE в Railway.")
+        return
+
     if not _grant_admin_access(message):
+        if _looks_like_admin_code_attempt(message.text):
+            await message.answer("Код не подошёл. Проверь раскладку клавиатуры и отправь код ещё раз одним сообщением.")
         return
 
     me = await message.bot.get_me()
