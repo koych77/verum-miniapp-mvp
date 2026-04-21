@@ -41,6 +41,21 @@ app.add_middleware(
 )
 app.include_router(router)
 
+
+@app.middleware("http")
+async def prevent_miniapp_cache(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith(("/miniapp", "/assets")) or request.url.path in {
+        "/api/v1/meta",
+        "/api/v1/auth/me",
+        "/api/v1/auth/telegram/init",
+    }:
+        for header, value in FRONTEND_SHELL_HEADERS.items():
+            response.headers[header] = value
+        if "etag" in response.headers:
+            del response.headers["etag"]
+    return response
+
 frontend_dist = Path(settings.frontend_dist_dir)
 frontend_index = frontend_dist / "index.html"
 frontend_assets = frontend_dist / "assets"

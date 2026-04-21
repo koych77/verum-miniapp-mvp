@@ -103,8 +103,10 @@ function parseErrorMessage(raw: string, status: number) {
 async function createSessionToken() {
   const response = await fetch(`${API_BASE}/auth/telegram/init`, {
     method: "POST",
+    cache: "no-store",
     headers: {
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "Cache-Control": "no-cache"
     },
     body: JSON.stringify({ initData: getInitData() })
   });
@@ -142,8 +144,10 @@ async function request<T>(path: string, init?: RequestInit, retryOnAuth = true):
   const token = path === "/auth/telegram/init" ? null : await ensureSession();
   const response = await fetch(`${API_BASE}${path}`, {
     ...init,
+    cache: "no-store",
     headers: {
       "Content-Type": "application/json",
+      "Cache-Control": "no-cache",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {})
     }
