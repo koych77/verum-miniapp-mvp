@@ -7,7 +7,25 @@ const VERSION_POLL_INTERVAL_MS = 45_000;
 let reauthPromise: Promise<string> | null = null;
 let versionWatcherStarted = false;
 
-function getInitData() {
+function isTelegramLaunch() {
+  return Boolean(window.Telegram?.WebApp || window.location.search.includes("tgWebApp") || window.location.hash.includes("tgWebApp"));
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+async function waitForTelegramInitData() {
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const initData = window.Telegram?.WebApp?.initData;
+    if (initData) {
+      return initData;
+    }
+    if (!isTelegramLaunch()) {
+      return "demo";
+    }
+    await delay(100);
+  }
   return window.Telegram?.WebApp?.initData || "demo";
 }
 
@@ -101,6 +119,7 @@ function parseErrorMessage(raw: string, status: number) {
 }
 
 async function createSessionToken() {
+  const initData = await waitForTelegramInitData();
   const response = await fetch(`${API_BASE}/auth/telegram/init`, {
     method: "POST",
     cache: "no-store",
@@ -108,7 +127,7 @@ async function createSessionToken() {
       "Content-Type": "application/json",
       "Cache-Control": "no-cache"
     },
-    body: JSON.stringify({ initData: getInitData() })
+    body: JSON.stringify({ initData })
   });
 
   if (!response.ok) {
