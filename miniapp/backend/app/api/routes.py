@@ -131,6 +131,28 @@ def _next_verum_id(db: Session) -> str:
     return f"V-{date.today().year}-{count:06d}"
 
 
+def _admin_telegram_user_ids() -> set[str]:
+    return {item.strip() for item in settings.admin_telegram_user_ids.split(",") if item.strip()}
+
+
+def _ensure_configured_admin_role(user: User, db: Session, source: str) -> None:
+    if not user.telegram_user_id or user.telegram_user_id not in _admin_telegram_user_ids():
+        return
+    if user.role == "admin" and user.email_verified:
+        return
+
+    user.role = "admin"
+    user.email_verified = True
+    db.add(
+        AuditLog(
+            actor_user_id=user.id,
+            entity_type="auth",
+            action="admin_access_granted",
+            payload=_json_payload({"source": source, "telegram_user_id": user.telegram_user_id}),
+        )
+    )
+
+
 def _telegram_auth_payload(init_data: str | None) -> dict:
     if not init_data or init_data == "demo":
         return {}
@@ -160,6 +182,7 @@ def _provision_telegram_user(payload: dict, db: Session) -> User:
     user = db.query(User).filter(User.telegram_user_id == telegram_user_id).first()
     if user:
         user.telegram_username = telegram_username
+        _ensure_configured_admin_role(user, db, "configured_telegram_id")
         return user
 
     email = f"telegram-{telegram_user_id}@verum.app"
@@ -172,6 +195,7 @@ def _provision_telegram_user(payload: dict, db: Session) -> User:
     )
     db.add(user)
     db.flush()
+    _ensure_configured_admin_role(user, db, "configured_telegram_id")
 
     first_name = payload.get("first_name") or "Новый"
     last_name = payload.get("last_name") or "участник"

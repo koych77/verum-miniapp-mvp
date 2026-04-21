@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     telegram_webapp_url: str = "http://localhost:5173"
     telegram_miniapp_short_name: str = ""
     admin_access_code: str = "VERUM2026ADMIN"
+    admin_telegram_user_ids: str = "697068570"
     admin_email: str = "admin@verum.app"
     frontend_dist_dir: str = "/app/frontend_dist"
     enable_bot_polling: bool = True
