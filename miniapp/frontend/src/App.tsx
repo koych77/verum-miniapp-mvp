@@ -99,7 +99,7 @@ export default function App() {
 
   let content = <HomePage partners={partners} news={news} events={events} top10={top10} profile={profile} />;
   if (activeTab === "rating") content = <RatingPage ratings={ratings} />;
-  if (activeTab === "events") content = <EventsPage events={events} />;
+  if (activeTab === "events") content = <EventsPage events={events} canSelfRegister={auth?.role !== "admin"} />;
   if (activeTab === "profile") {
     content =
       auth?.role === "admin" ? (

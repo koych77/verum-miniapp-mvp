@@ -26,7 +26,15 @@ async function waitForTelegramInitData() {
     }
     await delay(100);
   }
-  return window.Telegram?.WebApp?.initData || "demo";
+
+  const initData = window.Telegram?.WebApp?.initData;
+  if (initData) {
+    return initData;
+  }
+  if (isTelegramLaunch()) {
+    throw new Error("Telegram не передал данные входа. Закрой Mini App и открой заново через кнопку бота.");
+  }
+  return "demo";
 }
 
 function currentUrlWithVersion(version: string) {

@@ -196,6 +196,8 @@ def _provision_telegram_user(payload: dict, db: Session) -> User:
     db.add(user)
     db.flush()
     _ensure_configured_admin_role(user, db, "configured_telegram_id")
+    if user.role == "admin":
+        return user
 
     first_name = payload.get("first_name") or "Новый"
     last_name = payload.get("last_name") or "участник"
@@ -471,6 +473,8 @@ def event_results(slug: str, db: Session = Depends(get_db)):
 
 @router.post("/events/{event_id}/register-self")
 def register_self(event_id: str, payload: RegisterEventIn, db: Session = Depends(get_db), user: User = Depends(_current_user)):
+    if user.role != "participant":
+        raise HTTPException(status_code=403, detail="Регистрация доступна только участнику.")
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
         raise HTTPException(status_code=404, detail="Профиль участника не найден.")
@@ -544,6 +548,8 @@ def participants(db: Session = Depends(get_db)):
 
 @router.get("/participants/me", response_model=ParticipantPrivateOut)
 def participant_me(db: Session = Depends(get_db), user: User = Depends(_current_user)):
+    if user.role != "participant":
+        raise HTTPException(status_code=403, detail="Профиль участника доступен только участнику.")
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
         raise HTTPException(status_code=404, detail="Профиль участника не найден.")
@@ -558,6 +564,8 @@ def participant_me(db: Session = Depends(get_db), user: User = Depends(_current_
 
 @router.get("/participants/me/history", response_model=list[ParticipantHistoryItemOut])
 def participant_me_history(db: Session = Depends(get_db), user: User = Depends(_current_user)):
+    if user.role != "participant":
+        raise HTTPException(status_code=403, detail="История участника доступна только участнику.")
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
         raise HTTPException(status_code=404, detail="История участника недоступна.")
@@ -573,6 +581,8 @@ def participant_me_history(db: Session = Depends(get_db), user: User = Depends(_
 
 @router.patch("/participants/me")
 def update_participant_me(payload: ParticipantUpdateIn, db: Session = Depends(get_db), user: User = Depends(_current_user)):
+    if user.role != "participant":
+        raise HTTPException(status_code=403, detail="Редактирование профиля доступно только участнику.")
     participant = db.query(Participant).filter(Participant.user_id == user.id).first()
     if not participant:
         raise HTTPException(status_code=404, detail="Профиль участника не найден.")

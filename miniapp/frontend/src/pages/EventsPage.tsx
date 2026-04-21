@@ -11,13 +11,23 @@ function formatEventStatus(status: string) {
   return map[status] || status;
 }
 
-export function EventsPage({ events }: { events: EventItem[] }) {
+type EventsPageProps = {
+  events: EventItem[];
+  canSelfRegister: boolean;
+};
+
+export function EventsPage({ events, canSelfRegister }: EventsPageProps) {
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [expandedSlug, setExpandedSlug] = useState<string | null>(null);
   const [resultsCache, setResultsCache] = useState<Record<string, EventResult[]>>({});
 
   async function handleRegister(eventId: string, disciplineTitle: string) {
+    if (!canSelfRegister) {
+      setMessage("Администратор видит события в режиме контроля. Регистрация доступна только участникам.");
+      return;
+    }
+
     const key = `${eventId}:${disciplineTitle}`;
     setPendingKey(key);
     setMessage("");
@@ -51,6 +61,7 @@ export function EventsPage({ events }: { events: EventItem[] }) {
   return (
     <SectionCard title="События" subtitle="Актуальные мероприятия, номинации, регистрация и опубликованные результаты">
       {message ? <div className="status-banner">{message}</div> : null}
+      {!canSelfRegister ? <div className="status-banner">Админ-режим: регистрация на события отключена, чтобы не создавать заявки от администратора.</div> : null}
       <div className="event-column">
         {events.length ? (
           events.map((event) => {
@@ -82,7 +93,7 @@ export function EventsPage({ events }: { events: EventItem[] }) {
                         type="button"
                         className="chip chip-button"
                         onClick={() => void handleRegister(event.id, discipline.title)}
-                        disabled={!event.registration_open || pendingKey === `${event.id}:${discipline.title}`}
+                        disabled={!canSelfRegister || !event.registration_open || pendingKey === `${event.id}:${discipline.title}`}
                       >
                         {pendingKey === `${event.id}:${discipline.title}` ? "Отправляем..." : discipline.title}
                       </button>
